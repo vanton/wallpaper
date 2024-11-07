@@ -1,3 +1,4 @@
 Pic/*.*
 log/*.*
+__pycache__
 .venv

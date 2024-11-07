@@ -9,28 +9,8 @@ Last Modified: Tuesday, 2024-11-05 00:31:09
 Modified By: vanton
 -----
 Copyright (c) 2024
-
-:command: python3 wallhavenDownload.py -m toplist -s./Pic -p 1
-:command: python3 wallhavenDownload.py -m latest -s./Pic -p 1
-:command: python3 wallhavenDownload.py -m hot -s ./Pic -p 1
-
-参数说明:
---categories 110
-    -c 110
-    爬取图片分类 General, Anime, People:
-    110 -> General+Anime,
-    111 -> General+Anime+People, (默认)
-    100 -> General
---mode {toplist, latest, hot}
-    -m hot
-爬取图片模式，{toplist, latest, hot} 三种模式，默认为 hot
---savePath savePath
-    -s ./Pic
-图片保存路径，默认 ./Pic
---maxPage maxPage
-    -p 1
-最大页数, 默认 1
 '''
+
 
 import json
 import logging
@@ -38,12 +18,8 @@ import os
 import subprocess
 import time
 from logging.handlers import TimedRotatingFileHandler
-from colorama import Back, Fore, Style
-from colorama import init as colorInit
 
 from APIKey import APIKey
-
-colorInit()
 
 #!##############################################################################
 # 常量配置
@@ -67,16 +43,39 @@ picTypeMap = {
 # parser.add_argument('--maxPage', '-p', default=2, help='最大页数')
 # args = parser.parse_args()
 
+'''
+: command: python3 wallhavenDownload.py - m toplist - s./Pic - p 1
+: command: python3 wallhavenDownload.py - m latest - s./Pic - p 1
+: command: python3 wallhavenDownload.py - m hot - s ./Pic - p 1
+
+参数说明:
+--categories 110
+-c 110
+爬取图片分类 General, Anime, People:
+    110 -> General+Anime,
+    111 -> General+Anime+People, (默认)
+    100 -> General
+--mode {toplist, latest, hot}
+-m hot
+爬取图片模式，{toplist, latest, hot} 三种模式，默认为 hot
+--savePath savePath
+-s ./Pic
+图片保存路径，默认 ./Pic
+--maxPage maxPage
+-p 1
+最大页数, 默认 1
+'''
+
 
 class args:
+    ''' 需要时请修改此参数
+    '''
     categories = '111'
     mode = 'hot'
     savePath = './Pic'
     maxPage = 2
     ratios = 'landscape'
 
-
-print(args)
 
 #!##############################################################################
 
@@ -88,22 +87,19 @@ class MyFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         '''Customize the log format
 
-        This function is used to customize the log format, it will color the log level
-        name according to the log level
-
         :param record: The log record
         :return: The formatted string
         '''
         record.message = record.getMessage()
         log_level_colors = {
-            logging.INFO: f"{Fore.GREEN}{record.levelname}{Fore.RESET}",
-            logging.WARNING: f"{Fore.YELLOW}{record.levelname}{Fore.RESET}",
-            logging.ERROR: f"{Fore.RED}{record.levelname}{Fore.RESET}",
-            logging.CRITICAL: f"{Back.RED}{Fore.WHITE}{record.levelname}{Style.RESET_ALL}",
-            logging.DEBUG: f"{Fore.CYAN}{record.levelname}{Fore.RESET}"
+            logging.INFO: record.levelname,
+            logging.WARNING: record.levelname,
+            logging.ERROR: record.levelname,
+            logging.CRITICAL: record.levelname,
+            logging.DEBUG: record.levelname
         }
         record.levelname = log_level_colors.get(
-            record.levelno, f"{Fore.WHITE}{record.levelname}{Fore.RESET}")
+            record.levelno, record.levelname)
         return super().format(record)
 
 
@@ -111,18 +107,12 @@ class Log:
     # when 轮换时间 S: 秒 M: 分 H: 小时 D: 天 W: 周
 
     def __init__(self, logPath=logPath, when=when, maxBytes=1024*1000, backupCount=backupCount):
-        """
-        Initialize a Log instance with specified logging configurations.
-
-        This constructor sets up the logging environment, including file and console log handlers.
-        It ensures that the log directory and file exist, creates a logger with a specific format,
-        and configures handlers to manage log rotation based on time.
-
+        '''
         :param logPath: The path where the log file will be stored.
         :param when: The interval for rotating the log file (e.g., 'H' for hourly).
         :param maxBytes: The maximum file size for log rotation by size (unused in current implementation).
         :param backupCount: The number of backup log files to keep.
-        """
+        '''
         # 文件不存在则创建
         if not os.path.exists(os.path.dirname(logPath)):
             os.makedirs(os.path.dirname(logPath))
@@ -140,15 +130,10 @@ class Log:
         # 按日期轮换
 
         def namer(name: str) -> str:
-            """
-            Rename log files during rotation by adjusting the position of the date suffix.
-
-            This function takes in a log filename and repositions the date suffix
-            so that it follows the main part of the filename, before the ".log" extension.
-
+            '''
             :param name: The original log filename with a date suffix before ".log".
             :return: The modified log filename with the date suffix repositioned.
-            """
+            '''
             # xxx.log.2021-11-05 -> xxx.2021-11-05.log`
             return name.replace(".log", "") + ".log"
 
@@ -194,11 +179,6 @@ log = Log()
 
 
 def init():
-    '''
-    Init the global variables and settings
-
-    This function will generate the wallHavenUrlBase and create the savePath directory
-    '''
     global wallHavenUrlBase
     # https://wallhaven.cc/search?categories=110&purity=100&sorting=hot&order=desc
     # sorting=toplist toplist
@@ -216,8 +196,6 @@ def init():
 
 def formatTime(atime=None) -> str:
     '''
-    Format the time in seconds since the epoch into a string.
-
     :param atime: The time in seconds since the epoch, or None to format the current time.
     :return: A string of the form "YYYY-MM-DD HH:MM:SS".
     '''
@@ -226,8 +204,6 @@ def formatTime(atime=None) -> str:
 
 def fileSize(filesize: int) -> str:
     '''
-    Format the size of a file in bytes into a string.
-
     :param filesize: The size of the file in bytes.
     :return: A string of the form "X.XX MB" representing the size of the file in megabytes.
     '''
@@ -237,8 +213,6 @@ def fileSize(filesize: int) -> str:
 
 def dirSize(path: str) -> str:
     '''
-    Calculate the size of a directory in megabytes.
-
     :param path: The path to the directory to calculate the size of.
     :return: A string of the form "X.XX MB" representing the size of the directory in megabytes.
     '''
@@ -256,10 +230,6 @@ def dirInfo(path: str):
     '''
     Log information about a directory.
 
-    This function checks if the given path exists and is a directory. If it is, it logs
-    the directory path and its size. If the path exists but is not a directory, it logs an error.
-    If the path does not exist, it logs an error indicating the directory does not exist.
-
     :param path: The path to the directory to log information about.
     '''
     if os.path.exists(path):
@@ -276,11 +246,6 @@ def fileRemove(file: str):
     '''
     Remove a file.
 
-    This function checks if the given file exists and is a file (not a directory).
-    If it is, it removes the file and logs a success message.
-    If the file exists but is not a file, it logs an error.
-    If the file does not exist, it logs an error indicating the file does not exist.
-
     :param file: The path to the file to remove.
     '''
     if os.path.exists(file):
@@ -296,10 +261,6 @@ def fileRemove(file: str):
 def cleanUp(path=args.savePath, max=96):
     '''
     Clean up files in a directory by removing older files.
-
-    This function logs the process of cleaning up files in the specified directory. It retains a maximum
-    number of recent files, removing older files to free up space. It logs the initial number of files,
-    cleans up the directory, and logs the final state.
 
     :param path: The path to the directory to clean up. Defaults to args.savePath.
     :param max: The maximum number of files to retain in the directory. Defaults to 96.
@@ -325,11 +286,6 @@ def wget(url, savePath: str):
     '''
     Use wget to download a URL and save it to the specified path.
 
-    The wget command is used to download the specified URL and save it to the
-    specified savePath. The wget options used are "-O" to specify the output file
-    name, and the URL to download. This function does not check if the file
-    already exists, and will overwrite any existing file with the same name.
-
     :param url: The URL to download.
     :param savePath: The path to save the downloaded file to.
     '''
@@ -337,16 +293,12 @@ def wget(url, savePath: str):
 
 
 def curlGet(url) -> bytes:
-    """
+    '''
     Perform a GET request to the specified URL using curl.
-
-    This function uses the curl command-line tool to perform an HTTP GET request
-    to the provided URL. It captures the response body as bytes, with a maximum
-    timeout of 60 seconds and up to 3 retries for transient failures.
 
     :param url: The URL to send the GET request to.
     :return: The response body as bytes.
-    """
+    '''
     command = ["curl", "-XGET", "-L", url, "--max-time", "60", "--retry", "3"]
     result = subprocess.run(command, stdout=subprocess.PIPE).stdout
     return result
@@ -355,11 +307,6 @@ def curlGet(url) -> bytes:
 def handleResponseRes(responseResBytes) -> dict:
     '''
     Handle the response from the server.
-
-    This function takes in the response from the server as bytes and attempts to
-    decode it as a UTF-8 string. It then attempts to parse the decoded string as
-    a JSON object. If the decoding or parsing fails, it logs an error and returns
-    nothing.
 
     :param responseResBytes: The response from the server as bytes.
     :return: The parsed JSON object if the decoding and parsing succeed, otherwise None.
@@ -376,13 +323,6 @@ def handleResponseRes(responseResBytes) -> dict:
 def downloadOnePic(targetPic: map):
     '''
     Download a single image from the specified URL to the specified path.
-
-    This function takes in a map with the image's ID, resolution, URL, and file type.
-    It constructs the path to save the image to by combining the directory specified
-    in the args.savePath parameter, the resolution, the image ID, and the file type.
-    If the file already exists, it logs a warning and does not download the image.
-    Otherwise, it uses wget to download the image to the specified path. It logs
-    the result of the download operation.
 
     :param targetPic: A map with the image's ID, resolution, URL, and file type.
     '''
@@ -405,18 +345,12 @@ def downloadOnePic(targetPic: map):
 
 
 def getPendingPicUrl(wallHavenUrl: str) -> list:
-    """
+    '''
     Retrieve a list of pending picture URLs from the Wallhaven API.
-
-    This function performs an HTTP GET request to the specified Wallhaven URL,
-    processes the response to extract data about available images, and constructs
-    a list of image metadata. Each image's metadata includes its ID, resolution,
-    URL, and file type. If the response does not contain image data, the function
-    logs a critical error and exits the program.
 
     :param wallHavenUrl: The URL to query for image data.
     :return: A list of dictionaries containing image metadata (ID, resolution, URL, and file type).
-    """
+    '''
     responseRes = curlGet(wallHavenUrl)
     responseResDict = handleResponseRes(responseRes)
 
@@ -438,15 +372,11 @@ def getPendingPicUrl(wallHavenUrl: str) -> list:
 
 
 def downloadAllPicInOnePage(pageNum):
-    """
+    '''
     Download all images on a single page from Wallhaven.
 
-    This function retrieves the list of available images on the specified page,
-    and then downloads each image using the downloadOnePic function. It logs
-    information about the download process before and after downloading the images.
-
     :param pageNum: The page number to download images from.
-    """
+    '''
     log.info("正在下载第{}页图片".format(str(pageNum)))
     wallHavenUrl = wallHavenUrlBase + str(pageNum)
     pendingPicUrlList = getPendingPicUrl(wallHavenUrl)
@@ -458,13 +388,6 @@ def downloadAllPicInOnePage(pageNum):
 
 
 def WallhavenDownload():
-    """
-    The main entry point for the Wallhaven image downloader.
-
-    This function initializes the environment and then downloads all images on
-    the specified number of pages from Wallhaven.
-
-    """
     init()
 
     for pageNum in range(1, int(args.maxPage)+1):
