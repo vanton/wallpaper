@@ -11,37 +11,26 @@ Modified By: vanton
 Copyright (c) 2024
 '''
 
-
 import json
 import logging
 import os
 import subprocess
 import time
 from logging.handlers import TimedRotatingFileHandler
+from typing import Optional
 
 from APIKey import APIKey
 
-#!##############################################################################
-# 常量配置
-when = 'H'  # 按小时日志
-backupCount = 5  # 保留日志文件数量
-logPath = './log/wallhavenDownload.log'
 
-wallHavenUrlBase = ""
+class args:
+    ''' 需要时请修改此参数
+    '''
+    categories = '111'
+    mode = 'hot'
+    savePath = './Pic'
+    maxPage = 2
+    ratios = 'landscape'
 
-picTypeMap = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-}
-
-# 参数解析
-# parser = argparse.ArgumentParser()
-# # General, Anime, People: 110 - General+Anime, 111 - General+Anime+People
-# parser.add_argument('--categories', '-c', default='100', help='爬取图片分类 General, Anime, People: 110 - General+Anime, 111 - General+Anime+People')
-# parser.add_argument('--mode', '-m', default='hot', choices=['toplist', 'latest', 'hot'], help='爬取图片模式')
-# parser.add_argument('--savePath', '-s', default='./Pic', help='图片保存路径')
-# parser.add_argument('--maxPage', '-p', default=2, help='最大页数')
-# args = parser.parse_args()
 
 '''
 : command: python3 wallhavenDownload.py - m toplist - s./Pic - p 1
@@ -66,15 +55,27 @@ picTypeMap = {
 最大页数, 默认 1
 '''
 
+#!##############################################################################
+# 配置
+when = 'H'  # 按小时日志
+backup_count = 5  # 保留日志文件数量
+log_path = './log/wallhavenDownload.log'
 
-class args:
-    ''' 需要时请修改此参数
-    '''
-    categories = '111'
-    mode = 'hot'
-    savePath = './Pic'
-    maxPage = 2
-    ratios = 'landscape'
+wallhaven_url_base = ""
+
+pic_type_map = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+}
+
+# 参数解析
+# parser = argparse.ArgumentParser()
+# # General, Anime, People: 110 - General+Anime, 111 - General+Anime+People
+# parser.add_argument('--categories', '-c', default='100', help='爬取图片分类 General, Anime, People: 110 - General+Anime, 111 - General+Anime+People')
+# parser.add_argument('--mode', '-m', default='hot', choices=['toplist', 'latest', 'hot'], help='爬取图片模式')
+# parser.add_argument('--savePath', '-s', default='./Pic', help='图片保存路径')
+# parser.add_argument('--maxPage', '-p', default=2, help='最大页数')
+# args = parser.parse_args()
 
 
 #!##############################################################################
@@ -85,18 +86,19 @@ class MyFormatter(logging.Formatter):
     '''
 
     def format(self, record: logging.LogRecord) -> str:
-        '''Customize the log format
+        '''自定义日志格式
 
-        :param record: The log record
-        :return: The formatted string
+        :param record: 日志记录
+        :return: 格式化后的字符串
         '''
         record.message = record.getMessage()
+        # 这里的字典可以简化，不需要重复使用 record.levelname
         log_level_colors = {
-            logging.INFO: record.levelname,
-            logging.WARNING: record.levelname,
-            logging.ERROR: record.levelname,
-            logging.CRITICAL: record.levelname,
-            logging.DEBUG: record.levelname
+            logging.INFO: "INFO",
+            logging.WARNING: "WARNING",
+            logging.ERROR: "ERROR",
+            logging.CRITICAL: "CRITICAL",
+            logging.DEBUG: "DEBUG"
         }
         record.levelname = log_level_colors.get(
             record.levelno, record.levelname)
@@ -106,7 +108,7 @@ class MyFormatter(logging.Formatter):
 class Log:
     # when 轮换时间 S: 秒 M: 分 H: 小时 D: 天 W: 周
 
-    def __init__(self, logPath=logPath, when=when, maxBytes=1024*1000, backupCount=backupCount):
+    def __init__(self, logPath=log_path, when=when, maxBytes=1024*1000, backupCount=backup_count):
         '''
         :param logPath: The path where the log file will be stored.
         :param when: The interval for rotating the log file (e.g., 'H' for hourly).
@@ -179,7 +181,7 @@ log = Log()
 
 
 def init():
-    global wallHavenUrlBase
+    global wallhaven_url_base
     # https://wallhaven.cc/search?categories=110&purity=100&sorting=hot&order=desc
     # sorting=toplist toplist
     # sorting=hot 最热
@@ -187,216 +189,226 @@ def init():
     # atleast=1000x1000 最小尺寸 1000x1000
     # topRange=1w 一周
 
-    wallHavenUrlBase = "https://wallhaven.cc/api/v1/search?apikey={}&categories={}&sorting={}&ratios={}&purity=100&atleast=1000x1000&topRange=1w&page=".format(
-        APIKey, args.categories, args.mode, args.ratios)
-    log.info(wallHavenUrlBase)
+    wallhaven_url_base = f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={args.categories}&sorting={args.mode}&ratios={args.ratios}&purity=100&atleast=1000x1000&topRange=1w&page="
+    log.info(wallhaven_url_base)
     # 创建文件保存目录
     os.makedirs(args.savePath, exist_ok=True)
 
 
-def formatTime(atime=None) -> str:
+def format_time(atime: float = None) -> str:
     '''
-    :param atime: The time in seconds since the epoch, or None to format the current time.
-    :return: A string of the form "YYYY-MM-DD HH:MM:SS".
+    :param atime: 时间戳秒数，或为 None 以格式化当前时间。
+    :return: 格式为 "YYYY-MM-DD HH:MM:SS" 的字符串。
     '''
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(atime))
 
 
-def fileSize(filesize: int) -> str:
+def file_size(size_in_bytes: int) -> str:
     '''
-    :param filesize: The size of the file in bytes.
-    :return: A string of the form "X.XX MB" representing the size of the file in megabytes.
+    计算文件大小并返回以MB为单位的字符串表示。
+
+    :param size_in_bytes: 文件大小（字节）
+    :return: 以"X.XX MB"格式表示的文件大小
     '''
-    filesize = filesize/float(1024*1024)
-    return str(round(filesize, 2)) + ' MB'
+    size_in_mb = size_in_bytes / float(1024 * 1024)
+    return f"{round(size_in_mb, 2)} MB"
 
 
-def dirSize(path: str) -> str:
+def dir_size(path: str) -> Optional[str]:
     '''
-    :param path: The path to the directory to calculate the size of.
-    :return: A string of the form "X.XX MB" representing the size of the directory in megabytes.
+    计算指定目录的大小。
+
+    :param path: 要计算大小的目录路径。
+    :return: 表示目录大小的字符串，格式为 "X.XX MB"。
     '''
     size = 0
     if os.path.exists(path):
-        output = subprocess.Popen(['du', '-s', path], stdout=subprocess.PIPE)
-        output = output.communicate()[0]
-        if output:
-            size = output.split()[0]
-        size = fileSize(int(size) * 1024)
+        try:
+            process = subprocess.Popen(
+                ['du', '-s', path], stdout=subprocess.PIPE)
+            process_output = process.communicate()[0]
+            if process_output:
+                size = int(process_output.split()[0]) * 1024  # 转换为字节
+                size = file_size(size)  # 假设file_size是一个已定义的函数
+        except Exception as e:
+            print(f"发生错误: {e}")
     return size
 
 
-def dirInfo(path: str):
+def dir_info(path: str) -> None:
     '''
-    Log information about a directory.
+    记录目录的信息。
 
-    :param path: The path to the directory to log information about.
+    :param path: 要记录信息的目录路径。
     '''
     if os.path.exists(path):
         if os.path.isdir(path):
-            log.info("<图片目录:{}> <大小:{}>".format(
-                path, dirSize(path)))
+            log.info(f"<图片目录:{path}> <大小:{dir_size(path)}>")
         else:
-            log.error("目标不是目录:{}".format(path))
+            log.error(f"目标不是目录: {path}")
     else:
-        log.error("图片目录不存在:{}".format(path))
+        log.error(f"图片目录不存在: {path}")
 
 
-def fileRemove(file: str):
+def remove_file(file: str):
     '''
-    Remove a file.
+    移除文件。
 
-    :param file: The path to the file to remove.
+    :param file: 要移除的文件路径。
     '''
     if os.path.exists(file):
         if os.path.isfile(file):
             os.remove(file)
-            log.info("文件删除成功:{}".format(file))
+            log.info(f"文件删除成功: {file}")
         else:
-            log.warning("目录不可删除:{}".format(file))
+            log.warning(f"目录不可删除: {file}")
     else:
-        log.error("文件不存在:{}".format(file))
+        log.error(f"文件不存在: {file}")
 
 
-def cleanUp(path=args.savePath, max=96):
+def clean_up(path=args.savePath, max_files=96):
     '''
-    Clean up files in a directory by removing older files.
+    清理目录中的文件，移除旧文件。
 
-    :param path: The path to the directory to clean up. Defaults to args.savePath.
-    :param max: The maximum number of files to retain in the directory. Defaults to 96.
+    :param path: 要清理的目录路径，默认为 args.savePath。
+    :param max_files: 要保留的最大文件数量，默认为 96。
     '''
     log.info("清理文件")
     if os.path.exists(path):
-        dirInfo(path)
+        dir_info(path)
         files = os.listdir(path)
-        log.info("清理前文件数量:{}".format(len(files)))
-        oldPwd = os.getcwd()
+        log.info(f"清理前文件数量: {len(files)}")
+        old_pwd = os.getcwd()
         os.chdir(path)
         files.sort(key=os.path.getctime)
-        del files[-max:]
+        del files[-max_files:]
+
         for file in files:
-            fileRemove(file)
-        os.chdir(oldPwd)
-        dirInfo(path)
+            remove_file(file)
+
+        os.chdir(old_pwd)
+        dir_info(path)
     else:
-        log.error("文件不存在:{}".format(path))
+        log.error(f"文件不存在: {path}")
 
 
-def wget(url, savePath: str):
+def wget(url: str, savePath: Optional[str]) -> None:
     '''
-    Use wget to download a URL and save it to the specified path.
+    使用 wget 下载指定的 URL 并将其保存到指定路径。
 
-    :param url: The URL to download.
-    :param savePath: The path to save the downloaded file to.
+    :param url: 要下载的 URL。
+    :param savePath: 保存下载文件的路径。可以为 None。
+
+    :raises ValueError: 如果 URL 或 savePath 无效。
+    :raises subprocess.CalledProcessError: 如果 wget 命令执行失败。
     '''
-    subprocess.run(["wget", "-O", savePath, url])
+    if not url or not savePath:
+        raise ValueError("URL 和 savePath 不能为空。")
+    try:
+        subprocess.run(["wget", "-O", savePath, url], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"下载失败: {e}")
 
 
-def curlGet(url) -> bytes:
+def curl_get(url: str) -> bytes:
     '''
-    Perform a GET request to the specified URL using curl.
+    使用 curl 对指定的 URL 执行 GET 请求。
 
-    :param url: The URL to send the GET request to.
-    :return: The response body as bytes.
+    :param url: 要发送 GET 请求的 URL。
+    :return: 响应体，类型为 bytes。
     '''
-    command = ["curl", "-XGET", "-L", url, "--max-time", "60", "--retry", "3"]
+    command = ["curl", "-X", "GET", "-L", url,
+               "--max-time", "60", "--retry", "3"]
     result = subprocess.run(command, stdout=subprocess.PIPE).stdout
     return result
 
 
-def handleResponseRes(responseResBytes) -> dict:
+def handle_server_response(response_bytes) -> dict:
     '''
-    Handle the response from the server.
-
-    :param responseResBytes: The response from the server as bytes.
-    :return: The parsed JSON object if the decoding and parsing succeed, otherwise None.
+    处理来自服务器的响应。
+    :param response_bytes: 服务器返回的字节数据。
+    :return: 如果解码和解析成功则返回解析后的 JSON 对象，否则返回 None。
     '''
     try:
-        responseResStr = str(responseResBytes, encoding="utf-8")
-        responseResDict = json.loads(responseResStr)
-        return responseResDict
-    except Exception as e:
-        log.critical("结果转化错误: {}".format(e))
-        return
+        response_str = response_bytes.decode("utf-8")
+        response_dict = json.loads(response_str)
+        return response_dict
+    except json.JSONDecodeError as e:
+        log.critical(f"结果转化错误: {e}")
+        return None
 
 
-def downloadOnePic(targetPic: map):
+def download_one_pic(target_pic: dict):
     '''
-    Download a single image from the specified URL to the specified path.
+    下载指定 URL 的单张图片到指定路径。
 
-    :param targetPic: A map with the image's ID, resolution, URL, and file type.
+    :param target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
     '''
-    id = targetPic['id']
-    resolution = targetPic['resolution']
-    url = targetPic['url']
-    picType = targetPic['fileType']
-    picPath = "{}/{}_{}.{}".format(args.savePath,
-                                   resolution, id, picTypeMap[picType])
-
-    log.info("正在下载图片 <ID:{}> <规格:{}> {} -> {}".format(id, resolution, url, picPath))
-    if os.path.isfile(picPath):
-        fileInfo = os.stat(picPath)
-        log.warning("图片已存在 <文件大小: {}> <时间: {}>".format(
-            fileSize(fileInfo.st_size), formatTime(fileInfo.st_atime)))
+    pic_id = target_pic['id']
+    resolution = target_pic['resolution']
+    url = target_pic['url']
+    pic_type = target_pic['file_type']
+    pic_path = f"{args.savePath}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
+    log.info(f"正在下载图片 <ID:{pic_id}> <规格:{resolution}> {url} -> {pic_path}")
+    if os.path.isfile(pic_path):
+        file_info = os.stat(pic_path)
+        log.warning(
+            f"图片已存在 <文件大小: {file_size(file_info.st_size)}> <时间: {format_time(file_info.st_atime)}>")
         return
-
-    wget(url, picPath)
+    wget(url, pic_path)
     log.info("图片下载成功")
 
 
-def getPendingPicUrl(wallHavenUrl: str) -> list:
+def get_pending_pic_url(wallhaven_url: str) -> list:
     '''
-    Retrieve a list of pending picture URLs from the Wallhaven API.
+    从 Wallhaven API 检索待处理的图片 URL 列表。
 
-    :param wallHavenUrl: The URL to query for image data.
-    :return: A list of dictionaries containing image metadata (ID, resolution, URL, and file type).
+    :param wallhaven_url: 查询图片数据的 URL。
+    :return: 包含图片元数据（ID、分辨率、URL 和文件类型）的字典列表。
     '''
-    responseRes = curlGet(wallHavenUrl)
-    responseResDict = handleResponseRes(responseRes)
-
-    pendingPicUrlList = []
-    if not responseResDict.get("data"):
+    response_res = curl_get(wallhaven_url)
+    response_res_dict = handle_server_response(response_res)
+    pending_pic_url_list = []
+    if not response_res_dict.get("data"):
         log.critical("获取图片列表失败")
-        exit(1)
-
-    for PicMsg in responseResDict["data"]:
-        PicMsgMain = {
-            'id': PicMsg['id'],
-            'resolution': PicMsg['resolution'],
-            'url': PicMsg['path'],
-            'fileType': PicMsg['file_type'],    # image/png image/jpeg
+        raise Exception("获取图片列表失败")  # 使用异常处理代替 exit(1)
+    for pic_msg in response_res_dict["data"]:
+        pic_msg_main = {
+            'id': pic_msg['id'],
+            'resolution': pic_msg['resolution'],
+            'url': pic_msg['path'],
+            'file_type': pic_msg['file_type'],    # image/png image/jpeg
         }
-        pendingPicUrlList.append(PicMsgMain)
+        pending_pic_url_list.append(pic_msg_main)
+    return pending_pic_url_list
 
-    return pendingPicUrlList
 
-
-def downloadAllPicInOnePage(pageNum):
+def download_all_pic_in_one_page(page_num):
     '''
-    Download all images on a single page from Wallhaven.
+    从 Wallhaven 下载单个页面上的所有图像。
 
-    :param pageNum: The page number to download images from.
+    :param pageNum: 下载图像的页码。
     '''
-    log.info("正在下载第{}页图片".format(str(pageNum)))
-    wallHavenUrl = wallHavenUrlBase + str(pageNum)
-    pendingPicUrlList = getPendingPicUrl(wallHavenUrl)
+    log.info(f"正在下载第{page_num}页图片")
+    wallhaven_url = wallhaven_url_base + str(page_num)
+    pending_pic_url_list = get_pending_pic_url(wallhaven_url)
 
-    for targetPic in pendingPicUrlList:
-        downloadOnePic(targetPic)
+    for target_pic in pending_pic_url_list:
+        download_one_pic(target_pic)
 
-    log.info("第{}页图片下载完成".format(str(pageNum)))
+    log.info(f"第{page_num}页图片下载完成")
 
 
-def WallhavenDownload():
+def wallhaven_download():
     init()
 
     for pageNum in range(1, int(args.maxPage)+1):
-        downloadAllPicInOnePage(pageNum)
+        download_all_pic_in_one_page(pageNum)
 
 
 if __name__ == "__main__":
     _sep = "-" * 15
     log.info(_sep + "START" + _sep)
-    WallhavenDownload()
-    cleanUp()
+    wallhaven_download()
+    clean_up()
     log.info(_sep + "END" + _sep + "\n")
