@@ -1,11 +1,11 @@
 '''
 Filename: \wallhavenDownload.py
 Project: wallpaper
-Version: v0.8
+Version: v0.8.2
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-11-05 00:31:09
+Last Modified: Tuesday, 2024-11-08 16:40:36
 Modified By: vanton
 -----
 Copyright (c) 2024
@@ -22,14 +22,14 @@ from typing import Optional
 from APIKey import APIKey
 
 
-class args:
+class Args():
     ''' 需要时请修改此参数
     '''
-    categories = '111'
-    mode = 'hot'
-    savePath = './Pic'
-    maxPage = 2
-    ratios = 'landscape'
+    CATEGORIES = '111'
+    MODE = 'hot'
+    SAVE_PATH = './Pic'
+    MAX_PAGE = 2
+    RATIOS = 'landscape'
 
 
 '''
@@ -189,10 +189,10 @@ def init():
     # atleast=1000x1000 最小尺寸 1000x1000
     # topRange=1w 一周
 
-    wallhaven_url_base = f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={args.categories}&sorting={args.mode}&ratios={args.ratios}&purity=100&atleast=1000x1000&topRange=1w&page="
+    wallhaven_url_base = f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={Args.CATEGORIES}&sorting={Args.MODE}&ratios={Args.RATIOS}&purity=100&atleast=1000x1000&topRange=1w&page="
     log.info(wallhaven_url_base)
     # 创建文件保存目录
-    os.makedirs(args.savePath, exist_ok=True)
+    os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
 def format_time(atime: float = None) -> str:
@@ -266,7 +266,7 @@ def remove_file(file: str):
         log.error(f"文件不存在: {file}")
 
 
-def clean_up(path=args.savePath, max_files=96):
+def clean_up(path=Args.SAVE_PATH, max_files=96):
     '''
     清理目录中的文件，移除旧文件。
 
@@ -348,7 +348,7 @@ def download_one_pic(target_pic: dict):
     resolution = target_pic['resolution']
     url = target_pic['url']
     pic_type = target_pic['file_type']
-    pic_path = f"{args.savePath}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
+    pic_path = f"{Args.SAVE_PATH}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
     log.info(f"正在下载图片 <ID:{pic_id}> <规格:{resolution}> {url} -> {pic_path}")
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
@@ -402,7 +402,7 @@ def download_all_pic_in_one_page(page_num):
 def wallhaven_download():
     init()
 
-    for pageNum in range(1, int(args.maxPage)+1):
+    for pageNum in range(1, int(Args.MAX_PAGE)+1):
         download_all_pic_in_one_page(pageNum)
 
 
