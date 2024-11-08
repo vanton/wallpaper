@@ -16,6 +16,7 @@ import logging
 import os
 import subprocess
 import time
+from colorama import init, Fore, Back, Style
 from logging.handlers import TimedRotatingFileHandler
 from typing import Optional
 
@@ -77,8 +78,9 @@ pic_type_map = {
 # parser.add_argument('--maxPage', '-p', default=2, help='最大页数')
 # args = parser.parse_args()
 
-
 #!##############################################################################
+
+init(autoreset=True)
 
 
 class MyFormatter(logging.Formatter):
@@ -94,11 +96,11 @@ class MyFormatter(logging.Formatter):
         record.message = record.getMessage()
         # 这里的字典可以简化，不需要重复使用 record.levelname
         log_level_colors = {
-            logging.INFO: "INFO",
-            logging.WARNING: "WARNING",
-            logging.ERROR: "ERROR",
-            logging.CRITICAL: "CRITICAL",
-            logging.DEBUG: "DEBUG"
+            logging.INFO: f"{Fore.GREEN}INFO{Style.RESET_ALL}",
+            logging.WARNING: f"{Fore.RED}WARNING{Style.RESET_ALL}",
+            logging.ERROR: f"{Fore.RED + Back.WHITE}ERROR{Style.RESET_ALL}",
+            logging.CRITICAL: f"{Fore.WHITE + Back.RED}CRITICAL{Style.RESET_ALL}",
+            logging.DEBUG: f"{Fore.BLUE}DEBUG{Style.RESET_ALL}"
         }
         record.levelname = log_level_colors.get(
             record.levelno, record.levelname)
@@ -124,7 +126,7 @@ class Log:
 
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
-        self._fmt = '%(asctime)s\t-\t[%(levelname)s]\t-\t%(message)s'
+        self._fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
 
         self.formatter = logging.Formatter(self._fmt)
 
@@ -190,7 +192,8 @@ def init():
     # topRange=1w 一周
 
     wallhaven_url_base = f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={Args.CATEGORIES}&sorting={Args.MODE}&ratios={Args.RATIOS}&purity=100&atleast=1000x1000&topRange=1w&page="
-    log.info(wallhaven_url_base)
+    log.info(wallhaven_url_base.split('&', 1)[1])
+    # log.info(wallhaven_url_base)
     # 创建文件保存目录
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
