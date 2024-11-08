@@ -2,3 +2,4 @@ Pic/*.*
 log/*.*
 __pycache__
 .venv
+APIKey.py

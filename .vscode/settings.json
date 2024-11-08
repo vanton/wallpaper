@@ -10,5 +10,6 @@
         "toplist",
         "wallhaven",
         "XGET"
-    ]
+    ],
+    "python.analysis.autoImportCompletions": true
 }
