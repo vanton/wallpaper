@@ -26,11 +26,11 @@ from APIKey import APIKey
 class Args():
     ''' 需要时请修改此参数
     '''
-    CATEGORIES = '111'
-    MODE = 'hot'
-    SAVE_PATH = './Pic'
-    MAX_PAGE = 2
-    RATIOS = 'landscape'
+    CATEGORIES = '111'    # General + Anime + People
+    MODE = 'hot'          # Download mode (hot/latest/toplist)
+    SAVE_PATH = './Pic'   # Where images are saved
+    MAX_PAGE = 2          # Maximum pages to download
+    RATIOS = 'landscape'  # Image aspect ratio filter
 
 
 '''
@@ -96,11 +96,11 @@ class MyFormatter(logging.Formatter):
         record.message = record.getMessage()
         # 这里的字典可以简化，不需要重复使用 record.levelname
         log_level_colors = {
-            logging.INFO: f"{Fore.GREEN}INFO{Style.RESET_ALL}",
-            logging.WARNING: f"{Fore.RED}WARNING{Style.RESET_ALL}",
-            logging.ERROR: f"{Fore.RED + Back.WHITE}ERROR{Style.RESET_ALL}",
+            logging.INFO:     f"{Fore.GREEN}INFO{Style.RESET_ALL}",
+            logging.WARNING:  f"{Fore.RED}WARNING{Style.RESET_ALL}",
+            logging.ERROR:    f"{Fore.RED + Back.WHITE}ERROR{Style.RESET_ALL}",
             logging.CRITICAL: f"{Fore.WHITE + Back.RED}CRITICAL{Style.RESET_ALL}",
-            logging.DEBUG: f"{Fore.BLUE}DEBUG{Style.RESET_ALL}"
+            logging.DEBUG:    f"{Fore.BLUE}DEBUG{Style.RESET_ALL}"
         }
         record.levelname = log_level_colors.get(
             record.levelno, record.levelname)
@@ -191,7 +191,10 @@ def init():
     # atleast=1000x1000 最小尺寸 1000x1000
     # topRange=1w 一周
 
-    wallhaven_url_base = f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={Args.CATEGORIES}&sorting={Args.MODE}&ratios={Args.RATIOS}&purity=100&atleast=1000x1000&topRange=1w&page="
+    wallhaven_url_base = (
+        f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={Args.CATEGORIES}"
+        f"&sorting={Args.MODE}&ratios={Args.RATIOS}&purity=100&atleast=1000x1000&topRange=1w&page="
+    )
     log.info(wallhaven_url_base.split('&', 1)[1])
     # log.info(wallhaven_url_base)
     # 创建文件保存目录
@@ -217,7 +220,7 @@ def file_size(size_in_bytes: int) -> str:
     return f"{round(size_in_mb, 2)} MB"
 
 
-def dir_size(path: str) -> Optional[str]:
+def dir_size(path: str) -> str | int:
     '''
     计算指定目录的大小。
 
@@ -232,13 +235,13 @@ def dir_size(path: str) -> Optional[str]:
             process_output = process.communicate()[0]
             if process_output:
                 size = int(process_output.split()[0]) * 1024  # 转换为字节
-                size = file_size(size)  # 假设file_size是一个已定义的函数
+                size = file_size(size)
         except Exception as e:
             print(f"发生错误: {e}")
     return size
 
 
-def dir_info(path: str) -> None:
+def dir_info(path: str):
     '''
     记录目录的信息。
 
@@ -295,7 +298,7 @@ def clean_up(path=Args.SAVE_PATH, max_files=96):
         log.error(f"文件不存在: {path}")
 
 
-def wget(url: str, savePath: Optional[str]) -> None:
+def wget(url: str, savePath: Optional[str]):
     '''
     使用 wget 下载指定的 URL 并将其保存到指定路径。
 
@@ -326,7 +329,7 @@ def curl_get(url: str) -> bytes:
     return result
 
 
-def handle_server_response(response_bytes) -> dict:
+def handle_server_response(response_bytes) -> dict | None:
     '''
     处理来自服务器的响应。
     :param response_bytes: 服务器返回的字节数据。
