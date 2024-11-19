@@ -17,20 +17,22 @@ import os
 import subprocess
 import time
 from colorama import init, Fore, Back, Style
+from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from typing import Optional
 
 from APIKey import APIKey
 
 
+@dataclass
 class Args():
-    ''' 需要时请修改此参数
-    '''
-    CATEGORIES = '111'    # General + Anime + People
-    MODE = 'hot'          # Download mode (hot/latest/toplist)
-    SAVE_PATH = './Pic'   # Where images are saved
-    MAX_PAGE = 2          # Maximum pages to download
-    RATIOS = 'landscape'  # Image aspect ratio filter
+    ''' 需要时请修改此参数'''
+
+    CATEGORIES: str = '111'    # General + Anime + People
+    MODE: str = 'hot'          # Download mode (hot/latest/toplist)
+    SAVE_PATH: str = './Pic'   # Where images are saved
+    MAX_PAGE: int = 2          # Maximum pages to download
+    RATIOS: str = 'landscape'  # Image aspect ratio filter
 
 
 '''
@@ -61,9 +63,7 @@ class Args():
 when = 'H'  # 按小时日志
 backup_count = 5  # 保留日志文件数量
 log_path = './log/wallhavenDownload.log'
-
 wallhaven_url_base = ""
-
 pic_type_map = {
     'image/png': 'png',
     'image/jpeg': 'jpg',
@@ -84,8 +84,7 @@ init(autoreset=True)
 
 
 class MyFormatter(logging.Formatter):
-    '''自定义日志格式
-    '''
+    '''自定义日志格式'''
 
     def format(self, record: logging.LogRecord) -> str:
         '''自定义日志格式
