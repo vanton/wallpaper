@@ -344,7 +344,7 @@ def handle_server_response(response_bytes) -> dict | None:
         return None
 
 
-def is_valid_image(file: os.BufferedReader | os.PathLike) -> bool:
+def is_valid_image(file) -> bool:
     '''
     检查文件是否是有效图像。
 
@@ -359,7 +359,7 @@ def is_valid_image(file: os.BufferedReader | os.PathLike) -> bool:
     '''
     b_valid = True
     if isinstance(file, (str, os.PathLike)):
-        fileObj: os.BufferedReader = open(file, 'rb')
+        fileObj = open(file, 'rb')
     else:
         fileObj = file
     try:
