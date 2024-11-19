@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "wallpaper-dev"
+version = "0.8.2"
+description = ""
+authors = ["vanton"]
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+colorama = "^0.4"
+
+[build-system]
+requires = ['poetry-core~=1.0']
+build-backend = 'poetry.core.masonry.api'
