@@ -1,7 +1,7 @@
 '''
 Filename: \wallhavenDownload.py
 Project: wallpaper
-Version: v0.8.2
+Version: v0.8.5
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
@@ -19,6 +19,7 @@ import time
 from colorama import init, Fore, Back, Style
 from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
+from PIL import Image
 from typing import Optional
 
 from APIKey import APIKey
@@ -343,6 +344,31 @@ def handle_server_response(response_bytes) -> dict | None:
         return None
 
 
+def is_valid_image(file: os.BufferedReader | os.PathLike) -> bool:
+    '''
+    检查文件是否是有效图像。
+
+    打开给定的文件并验证它是否是有效的图像格式。
+    支持文件路径和类文件对象。
+
+    Parameters:
+        file (str or os.PathLike or file-like object): The file to check.
+
+    Returns:
+        bool: True if the file is a valid image, False otherwise.
+    '''
+    b_valid = True
+    if isinstance(file, (str, os.PathLike)):
+        fileObj: os.BufferedReader = open(file, 'rb')
+    else:
+        fileObj = file
+    try:
+        Image.open(fileObj).verify()
+    except:
+        b_valid = False
+    return b_valid
+
+
 def download_one_pic(target_pic: dict):
     '''
     下载指定 URL 的单张图片到指定路径。
@@ -359,7 +385,10 @@ def download_one_pic(target_pic: dict):
         file_info = os.stat(pic_path)
         log.warning(
             f"图片已存在 <文件大小: {file_size(file_info.st_size)}> <时间: {format_time(file_info.st_atime)}>")
-        return
+        if is_valid_image(pic_path):
+            return
+        else:
+            log.error(f">>> 图片不完整，重新下载 <<<")
     wget(url, pic_path)
     log.info("图片下载成功")
 
