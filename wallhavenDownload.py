@@ -1,7 +1,7 @@
 '''
-Filename: \wallhavenDownload.py
+Filename: /wallhavenDownload.py
 Project: wallpaper
-Version: v0.8.5
+Version: v0.9.0
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
@@ -11,19 +11,34 @@ Modified By: vanton
 Copyright (c) 2024
 '''
 
-from rich.logging import RichHandler
 import json
 import logging
 import os
+import os.path
+import requests
+import signal
 import subprocess
 import time
-from dataclasses import dataclass
-from logging.handlers import TimedRotatingFileHandler
 from PIL import Image
-from typing import Optional
-from rich.progress import track
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from functools import partial
+from logging.handlers import TimedRotatingFileHandler
+from threading import Event
+from typing import (Iterable, Optional)
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 from rich.console import Console
-console = Console()
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TaskID,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
+from rich.logging import RichHandler
 
 from APIKey import APIKey
 
@@ -31,8 +46,7 @@ from APIKey import APIKey
 @dataclass
 class Args():
     ''' 需要时请修改此参数'''
-
-    CATEGORIES: str = '111'    # General + Anime + People
+    CATEGORIES: str = '110'    # General + Anime + People
     MODE: str = 'hot'          # Download mode (hot/latest/toplist)
     SAVE_PATH: str = './Pic'   # Where images are saved
     MAX_PAGE: int = 2          # Maximum pages to download
@@ -83,6 +97,30 @@ pic_type_map = {
 # args = parser.parse_args()
 
 #!##############################################################################
+
+console = Console()
+progress = Progress(
+    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+    BarColumn(bar_width=None),
+    "[progress.percentage]{task.percentage:>3.1f}%",
+    "•",
+    DownloadColumn(),
+    "•",
+    TransferSpeedColumn(),
+    "•",
+    TimeRemainingColumn(),
+    transient=True
+)
+done_event = Event()
+
+
+def handle_sigint(signum, frame):
+    done_event.set()
+
+
+signal.signal(signal.SIGINT, handle_sigint)
+# socks5_proxy = ""
+# proxies = dict(http=socks5_proxy, https=socks5_proxy)
 
 
 class Log:
@@ -239,37 +277,6 @@ def clean_up(path=Args.SAVE_PATH, max_files=96):
         log.error(f"文件不存在: {path}")
 
 
-def wget(url: str, savePath: Optional[str]):
-    '''
-    使用 wget 下载指定的 URL 并将其保存到指定路径。
-
-    :param url: 要下载的 URL。
-    :param savePath: 保存下载文件的路径。可以为 None。
-
-    :raises ValueError: 如果 URL 或 savePath 无效。
-    :raises subprocess.CalledProcessError: 如果 wget 命令执行失败。
-    '''
-    if not url or not savePath:
-        raise ValueError("URL 和 savePath 不能为空。")
-    try:
-        subprocess.run(["wget", "-q", "-O", savePath, url], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"下载失败: {e}")
-
-
-def curl_get(url: str) -> bytes:
-    '''
-    使用 curl 对指定的 URL 执行 GET 请求。
-
-    :param url: 要发送 GET 请求的 URL。
-    :return: 响应体，类型为 bytes。
-    '''
-    command = ["curl", "-X", "GET", "-L", url,
-               "--max-time", "60", "--retry", "3"]
-    result = subprocess.run(command, stdout=subprocess.PIPE).stdout
-    return result
-
-
 def handle_server_response(response_bytes) -> dict | None:
     '''
     处理来自服务器的响应。
@@ -310,6 +317,39 @@ def is_valid_image(file) -> bool:
     return b_valid
 
 
+def copy_url(task_id: TaskID, url: str, path: str) -> None:
+    """Copy data from a url to a local file."""
+    # progress.console.log(f"Requesting {url}")
+    try:
+        req = Request(url, headers={'User-Agent': "Magic Browser"})
+        response = urlopen(req, timeout=5)
+    except URLError as e:
+        raise (f"There was an error: {e}")
+    # This will break if the response doesn't contain content length
+    progress.update(task_id, total=int(response.info()["Content-length"]))
+    with open(path, "wb") as dest_file:
+        progress.start_task(task_id)
+        for data in iter(partial(response.read, 1024), b""):
+            dest_file.write(data)
+            progress.update(task_id, advance=len(data))
+            if done_event.is_set():
+                return
+    # progress.console.log(f"Downloaded {path}")
+
+
+def download(urls: Iterable[str], dest_dir: str = Args.SAVE_PATH):
+    """Download multiple files to the given directory."""
+    with progress:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for url in urls:
+                filename = url.split("/")[-1]
+                dest_path = os.path.join(dest_dir, filename)
+                task_id = progress.add_task(
+                    "download", filename=filename, start=False)
+                pool.submit(copy_url, task_id, url, dest_path)
+                # print(f"downloading {filename}")
+
+
 def download_one_pic(target_pic: dict):
     '''
     下载指定 URL 的单张图片到指定路径。
@@ -321,7 +361,7 @@ def download_one_pic(target_pic: dict):
     url = target_pic['url']
     pic_type = target_pic['file_type']
     pic_path = f"{Args.SAVE_PATH}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
-    log.info(f"<{pic_id}> <{resolution}> {url}")
+    # log.info(f"<{pic_id}> <{resolution}> {url}")
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.warning(
@@ -330,8 +370,9 @@ def download_one_pic(target_pic: dict):
             return
         else:
             log.error(f">>> 图片不完整，重新下载 <<<")
-    wget(url, pic_path)
-    log.info("图片下载成功")
+    # wget(url, pic_path)
+    # log.info("图片下载成功")
+    return url
 
 
 def get_pending_pic_url(wallhaven_url: str) -> list:
@@ -341,7 +382,8 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
     :param wallhaven_url: 查询图片数据的 URL。
     :return: 包含图片元数据（ID、分辨率、URL 和文件类型）的字典列表。
     '''
-    response_res = curl_get(wallhaven_url)
+    # response_res = requests.get(wallhaven_url, proxies=proxies).content
+    response_res = requests.get(wallhaven_url).content
     response_res_dict = handle_server_response(response_res)
     pending_pic_url_list = []
     if not response_res_dict.get("data"):
@@ -364,19 +406,20 @@ def download_all_pic_in_one_page(page_num):
 
     :param pageNum: 下载图像的页码。
     '''
-    log.info(f"正在下载第{page_num}页图片")
+    # log.info(f"正在下载第{page_num}页图片")
     wallhaven_url = wallhaven_url_base + str(page_num)
     pending_pic_url_list = get_pending_pic_url(wallhaven_url)
-
-    for target_pic in track(pending_pic_url_list, console=console):
-        download_one_pic(target_pic)
-
-    log.info(f"第{page_num}页图片下载完成")
+    urls = []
+    for target_pic in pending_pic_url_list:
+        url = download_one_pic(target_pic)
+        if (url):
+            urls.append(url)
+    download(urls)
+    # log.info(f"第{page_num}页图片下载完成")
 
 
 def wallhaven_download():
     init_download()
-
     for pageNum in range(1, int(Args.MAX_PAGE)+1):
         download_all_pic_in_one_page(pageNum)
 
