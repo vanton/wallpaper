@@ -11,16 +11,19 @@ Modified By: vanton
 Copyright (c) 2024
 '''
 
+from rich.logging import RichHandler
 import json
 import logging
 import os
 import subprocess
 import time
-from colorama import init, Fore, Back, Style
 from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from PIL import Image
 from typing import Optional
+from rich.progress import track
+from rich.console import Console
+console = Console()
 
 from APIKey import APIKey
 
@@ -81,31 +84,6 @@ pic_type_map = {
 
 #!##############################################################################
 
-init(autoreset=True)
-
-
-class MyFormatter(logging.Formatter):
-    '''自定义日志格式'''
-
-    def format(self, record: logging.LogRecord) -> str:
-        '''自定义日志格式
-
-        :param record: 日志记录
-        :return: 格式化后的字符串
-        '''
-        record.message = record.getMessage()
-        # 这里的字典可以简化，不需要重复使用 record.levelname
-        log_level_colors = {
-            logging.INFO:     f"{Fore.GREEN}INFO{Style.RESET_ALL}",
-            logging.WARNING:  f"{Fore.RED}WARNING{Style.RESET_ALL}",
-            logging.ERROR:    f"{Fore.RED + Back.WHITE}ERROR{Style.RESET_ALL}",
-            logging.CRITICAL: f"{Fore.WHITE + Back.RED}CRITICAL{Style.RESET_ALL}",
-            logging.DEBUG:    f"{Fore.BLUE}DEBUG{Style.RESET_ALL}"
-        }
-        record.levelname = log_level_colors.get(
-            record.levelno, record.levelname)
-        return super().format(record)
-
 
 class Log:
     # when 轮换时间 S: 秒 M: 分 H: 小时 D: 天 W: 周
@@ -124,65 +102,25 @@ class Log:
             with open(logPath, 'w', encoding='UTF-8') as f:
                 f.write('')
 
+        # self._fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
+        self._fmt = '[%(levelname)s] - %(message)s'
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format=self._fmt,
+            handlers=[
+                RichHandler(console=console),
+                TimedRotatingFileHandler(
+                    logPath, when=when, backupCount=backupCount, encoding='UTF-8')
+            ]
+        )
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        self._fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
-
-        self.formatter = logging.Formatter(self._fmt)
-
-        # 输出到文件
-        # 按日期轮换
-
-        def namer(name: str) -> str:
-            '''
-            :param name: The original log filename with a date suffix before ".log".
-            :return: The modified log filename with the date suffix repositioned.
-            '''
-            # xxx.log.2021-11-05 -> xxx.2021-11-05.log`
-            return name.replace(".log", "") + ".log"
-
-        self.fileHandler = TimedRotatingFileHandler(
-            logPath, when=when, backupCount=backupCount, encoding='UTF-8')
-        self.fileHandler.namer = namer
-        # self.fileHandler.suffix = "%Y-%m-%d_%H-%M.log"
-        # self.fileHandler.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}")
-
-        # 按文件大小轮换
-        # self.fileHandler = RotatingFileHandler(
-        #     logPath, maxBytes=maxBytes, backupCount=backupCount, encoding='UTF-8')
-
-        self.fileHandler.setFormatter(self.formatter)
-        self.logger.addHandler(self.fileHandler)
-
-        # 输出到控制台
-        self.streamFormatter = MyFormatter(self._fmt)
-        self.streamHandler = logging.StreamHandler()
-        self.streamHandler.setFormatter(self.streamFormatter)
-        self.logger.addHandler(self.streamHandler)
-
-    def info(self, msg):
-        self.logger.info(msg)
-
-    def error(self, msg):
-        self.logger.error(msg)
-
-    def warning(self, msg):
-        self.logger.warning(msg)
-
-    def debug(self, msg):
-        self.logger.debug(msg)
-
-    def critical(self, msg):
-        self.logger.critical(msg)
-
-    def exception(self, msg):
-        self.logger.exception(msg)
 
 
-log = Log()
+log = Log().logger
 
 
-def init():
+def init_download():
     global wallhaven_url_base
     # https://wallhaven.cc/search?categories=110&purity=100&sorting=hot&order=desc
     # sorting=toplist toplist
@@ -195,7 +133,8 @@ def init():
         f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={Args.CATEGORIES}"
         f"&sorting={Args.MODE}&ratios={Args.RATIOS}&purity=100&atleast=1000x1000&topRange=1w&page="
     )
-    log.info(wallhaven_url_base.split('&', 1)[1])
+    # log.info(wallhaven_url_base.split('&', 1)[1])
+    log.info(wallhaven_url_base)
     # log.info(wallhaven_url_base)
     # 创建文件保存目录
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
@@ -220,7 +159,7 @@ def file_size(size_in_bytes: int) -> str:
     return f"{round(size_in_mb, 2)} MB"
 
 
-def dir_size(path: str) -> str | int:
+def dir_size(path) -> str | int:
     '''
     计算指定目录的大小。
 
@@ -228,14 +167,16 @@ def dir_size(path: str) -> str | int:
     :return: 表示目录大小的字符串，格式为 "X.XX MB"。
     '''
     size = 0
-    if os.path.exists(path):
+    if os.path.isdir(path):
         try:
-            process = subprocess.Popen(
-                ['du', '-s', path], stdout=subprocess.PIPE)
-            process_output = process.communicate()[0]
-            if process_output:
-                size = int(process_output.split()[0]) * 1024  # 转换为字节
-                size = file_size(size)
+            size = sum(
+                sum(
+                    os.path.getsize(os.path.join(walk_result[0], element))
+                    for element in walk_result[2]
+                )
+                for walk_result in os.walk(path)
+            )
+            size = file_size(size)
         except Exception as e:
             print(f"发生错误: {e}")
     return size
@@ -311,7 +252,7 @@ def wget(url: str, savePath: Optional[str]):
     if not url or not savePath:
         raise ValueError("URL 和 savePath 不能为空。")
     try:
-        subprocess.run(["wget", "-O", savePath, url], check=True)
+        subprocess.run(["wget", "-q", "-O", savePath, url], check=True)
     except subprocess.CalledProcessError as e:
         print(f"下载失败: {e}")
 
@@ -380,11 +321,11 @@ def download_one_pic(target_pic: dict):
     url = target_pic['url']
     pic_type = target_pic['file_type']
     pic_path = f"{Args.SAVE_PATH}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
-    log.info(f"正在下载图片 <ID:{pic_id}> <规格:{resolution}> {url} -> {pic_path}")
+    log.info(f"<{pic_id}> <{resolution}> {url}")
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.warning(
-            f"图片已存在 <文件大小: {file_size(file_info.st_size)}> <时间: {format_time(file_info.st_atime)}>")
+            f"图片已存在 <{file_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>")
         if is_valid_image(pic_path):
             return
         else:
@@ -427,14 +368,14 @@ def download_all_pic_in_one_page(page_num):
     wallhaven_url = wallhaven_url_base + str(page_num)
     pending_pic_url_list = get_pending_pic_url(wallhaven_url)
 
-    for target_pic in pending_pic_url_list:
+    for target_pic in track(pending_pic_url_list, console=console):
         download_one_pic(target_pic)
 
     log.info(f"第{page_num}页图片下载完成")
 
 
 def wallhaven_download():
-    init()
+    init_download()
 
     for pageNum in range(1, int(Args.MAX_PAGE)+1):
         download_all_pic_in_one_page(pageNum)
@@ -442,7 +383,7 @@ def wallhaven_download():
 
 if __name__ == "__main__":
     _sep = "-" * 15
-    log.info(_sep + "START" + _sep)
+    log.info(f"{_sep} START {_sep} >>> {format_time()}")
     wallhaven_download()
     clean_up()
-    log.info(_sep + "END" + _sep + "\n")
+    log.info(f"{_sep}  END  {_sep} >>> {format_time()}\n")
