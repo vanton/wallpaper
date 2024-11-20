@@ -17,7 +17,6 @@ import os
 import os.path
 import requests
 import signal
-import subprocess
 import time
 from PIL import Image
 from concurrent.futures import ThreadPoolExecutor
@@ -109,7 +108,7 @@ progress = Progress(
     TransferSpeedColumn(),
     "•",
     TimeRemainingColumn(),
-    transient=True
+    # transient=True
 )
 done_event = Event()
 
@@ -141,7 +140,7 @@ class Log:
                 f.write('')
 
         # self._fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
-        self._fmt = '[%(levelname)s] - %(message)s'
+        self._fmt = '%(message)s'
 
         logging.basicConfig(
             level=logging.INFO,
@@ -178,7 +177,7 @@ def init_download():
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
-def format_time(atime: float = None) -> str:
+def format_time(atime: Optional[float] = None) -> str:
     '''
     :param atime: 时间戳秒数，或为 None 以格式化当前时间。
     :return: 格式为 "YYYY-MM-DD HH:MM:SS" 的字符串。
@@ -191,18 +190,18 @@ def file_size(size_in_bytes: int) -> str:
     计算文件大小并返回以MB为单位的字符串表示。
 
     :param size_in_bytes: 文件大小（字节）
-    :return: 以"X.XX MB"格式表示的文件大小
+    :return: 以"X.XXMB"格式表示的文件大小
     '''
     size_in_mb = size_in_bytes / float(1024 * 1024)
-    return f"{round(size_in_mb, 2)} MB"
+    return f"{round(size_in_mb, 2)}MB"
 
 
-def dir_size(path) -> str | int:
+def dir_size(path: str | os.PathLike) -> str | int:
     '''
     计算指定目录的大小。
 
     :param path: 要计算大小的目录路径。
-    :return: 表示目录大小的字符串，格式为 "X.XX MB"。
+    :return: 表示目录大小的字符串，格式为 "X.XXMB"。
     '''
     size = 0
     if os.path.isdir(path):
@@ -220,7 +219,7 @@ def dir_size(path) -> str | int:
     return size
 
 
-def dir_info(path: str):
+def dir_info(path: str | os.PathLike):
     '''
     记录目录的信息。
 
@@ -235,7 +234,7 @@ def dir_info(path: str):
         log.error(f"图片目录不存在: {path}")
 
 
-def remove_file(file: str):
+def remove_file(file: str | os.PathLike):
     '''
     移除文件。
 
@@ -292,32 +291,32 @@ def handle_server_response(response_bytes) -> dict | None:
         return None
 
 
-def is_valid_image(file) -> bool:
-    '''
-    检查文件是否是有效图像。
+# def is_valid_image(file: str | os.PathLike) -> bool:
+#     '''
+#     检查文件是否是有效图像。
 
-    打开给定的文件并验证它是否是有效的图像格式。
-    支持文件路径和类文件对象。
+#     打开给定的文件并验证它是否是有效的图像格式。
+#     支持文件路径和类文件对象。
 
-    Parameters:
-        file (str or os.PathLike or file-like object): The file to check.
+#     Parameters:
+#         file (str or os.PathLike or file-like object): The file to check.
 
-    Returns:
-        bool: True if the file is a valid image, False otherwise.
-    '''
-    b_valid = True
-    if isinstance(file, (str, os.PathLike)):
-        fileObj = open(file, 'rb')
-    else:
-        fileObj = file
-    try:
-        Image.open(fileObj).verify()
-    except:
-        b_valid = False
-    return b_valid
+#     Returns:
+#         bool: True if the file is a valid image, False otherwise.
+#     '''
+#     b_valid = True
+#     if isinstance(file, (str, os.PathLike)):
+#         fileObj = open(file, 'rb')
+#     else:
+#         fileObj = file
+#     try:
+#         Image.open(fileObj).verify()
+#     except:
+#         b_valid = False
+#     return b_valid
 
 
-def copy_url(task_id: TaskID, url: str, path: str) -> None:
+def copy_url(task_id: TaskID, url: str, path: str | os.PathLike) -> None:
     """Copy data from a url to a local file."""
     # progress.console.log(f"Requesting {url}")
     try:
@@ -329,11 +328,12 @@ def copy_url(task_id: TaskID, url: str, path: str) -> None:
     progress.update(task_id, total=int(response.info()["Content-length"]))
     with open(path, "wb") as dest_file:
         progress.start_task(task_id)
-        for data in iter(partial(response.read, 1024), b""):
+        for data in iter(partial(response.read, 102400), b""):
             dest_file.write(data)
             progress.update(task_id, advance=len(data))
             if done_event.is_set():
                 return
+        progress.remove_task(task_id)
     # progress.console.log(f"Downloaded {path}")
 
 
@@ -356,20 +356,26 @@ def download_one_pic(target_pic: dict):
 
     :param target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
     '''
-    pic_id = target_pic['id']
-    resolution = target_pic['resolution']
+    # pic_id = target_pic['id']
+    # resolution = target_pic['resolution']
     url = target_pic['url']
-    pic_type = target_pic['file_type']
-    pic_path = f"{Args.SAVE_PATH}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
+    filename = url.split("/")[-1]
+    filesize = target_pic['file_size']
+    # pic_type = target_pic['file_type']
+    # pic_path = f"{Args.SAVE_PATH}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
+    pic_path = f"{Args.SAVE_PATH}/{filename}"
     # log.info(f"<{pic_id}> <{resolution}> {url}")
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.warning(
-            f"图片已存在 <{file_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>")
-        if is_valid_image(pic_path):
+            # f"图片已存在 <{filename}> <{file_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>")
+            f"图片已存在 <{filename}> <{file_info.st_size} -> {filesize}> <{format_time(file_info.st_atime)}>")
+        if file_info.st_size == filesize:
             return
         else:
-            log.error(f">>> 图片不完整，重新下载 <<<")
+            log.error(f">>> 图片不完整，重新下载 <{filename}> <<<")
+        # if is_valid_image(pic_path):
+        #     return
     # wget(url, pic_path)
     # log.info("图片下载成功")
     return url
@@ -395,6 +401,7 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
             'resolution': pic_msg['resolution'],
             'url': pic_msg['path'],
             'file_type': pic_msg['file_type'],    # image/png image/jpeg
+            'file_size': pic_msg['file_size'],
         }
         pending_pic_url_list.append(pic_msg_main)
     return pending_pic_url_list
