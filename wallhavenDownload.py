@@ -361,7 +361,6 @@ def download_one_pic(target_pic: dict):
         # if is_valid_image(pic_path):
         #     return
     # wget(url, pic_path)
-    log.debug("图片下载成功")
     return url
 
 
@@ -391,7 +390,7 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
     return pending_pic_url_list
 
 
-def download_all_pic_in_one_page():
+def download_all_pics():
     """从 Wallhaven 下载指定页面范围的所有图像。"""
     urls = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
@@ -410,7 +409,7 @@ def download_all_pic_in_one_page():
 
 def wallhaven_download():
     init_download()
-    download_all_pic_in_one_page()
+    download_all_pics()
 
 
 if __name__ == "__main__":
