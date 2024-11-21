@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wallpaper-dev"
-version = "0.9.1"
+version = "0.9.2"
 description = ""
 authors = ["vanton"]
 readme = "README.md"
@@ -16,7 +16,8 @@ rich = "^13.9.4"
 logging = "^0.4.9.6"
 requests = "^2.32.3"
 typing-extensions = "^4.12.2"
-urllib3 = "^2.2.3"
+aiohttp = "^3.11.6"
+aiofiles = "^24.1.0"
 
 [build-system]
 requires = ['poetry-core~=1.0']

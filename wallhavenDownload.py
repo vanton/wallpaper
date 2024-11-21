@@ -1,7 +1,7 @@
 """
 Filename: /wallhavenDownload.py
 Project: wallpaper
-Version: v0.9.1
+Version: v0.9.2
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
