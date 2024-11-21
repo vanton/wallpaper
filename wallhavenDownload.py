@@ -1,4 +1,4 @@
-'''
+"""
 Filename: /wallhavenDownload.py
 Project: wallpaper
 Version: v0.9.1
@@ -9,7 +9,7 @@ Last Modified: Tuesday, 2024-11-08 16:40:36
 Modified By: vanton
 -----
 Copyright (c) 2024
-'''
+"""
 
 import json
 import logging
@@ -23,9 +23,9 @@ from dataclasses import dataclass
 from functools import partial
 from logging.handlers import TimedRotatingFileHandler
 from threading import Event
-from typing import (Iterable, Optional)
+from typing import Iterable, Optional
 from urllib.error import URLError
-from urllib.request import (Request, urlopen)
+from urllib.request import Request, urlopen
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import (
@@ -43,16 +43,17 @@ from APIKey import APIKey
 
 
 @dataclass
-class Args():
-    ''' 需要时请修改此参数'''
-    CATEGORIES: str = '110'    # General + Anime + People
-    MODE: str = 'hot'          # Download mode (hot/latest/toplist)
-    SAVE_PATH: str = './Pic'   # Where images are saved
-    MAX_PAGE: int = 2          # Maximum pages to download
-    RATIOS: str = 'landscape'  # Image aspect ratio filter
+class Args:
+    """需要时请修改此参数"""
+
+    CATEGORIES: str = "110"  # General + Anime + People
+    MODE: str = "hot"  # Download mode (hot/latest/toplist)
+    SAVE_PATH: str = "./Pic"  # Where images are saved
+    MAX_PAGE: int = 2  # Maximum pages to download
+    RATIOS: str = "landscape"  # Image aspect ratio filter
 
 
-'''
+"""
 : command: python3 wallhavenDownload.py - m toplist - s./Pic - p 1
 : command: python3 wallhavenDownload.py - m latest - s./Pic - p 1
 : command: python3 wallhavenDownload.py - m hot - s ./Pic - p 1
@@ -73,17 +74,17 @@ class Args():
 --maxPage maxPage
 -p 1
 最大页数, 默认 1
-'''
+"""
 
 #!##############################################################################
 # 配置
-when = 'H'  # 按小时日志
+when = "H"  # 按小时日志
 backup_count = 5  # 保留日志文件数量
-log_path = './log/wallhavenDownload.log'
+log_path = "./log/wallhavenDownload.log"
 wallhaven_url_base = ""
 pic_type_map = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
+    "image/png": "png",
+    "image/jpeg": "jpg",
 }
 
 # 参数解析
@@ -125,32 +126,36 @@ signal.signal(signal.SIGINT, handle_sigint)
 class Log:
     # when 轮换时间 S: 秒 M: 分 H: 小时 D: 天 W: 周
 
-    def __init__(self, logPath=log_path, when=when, maxBytes=1024*1000, backupCount=backup_count):
+    def __init__(
+        self,
+        logPath=log_path,
+        when=when,
+        maxBytes=1024 * 1000,
+        backupCount=backup_count,
+    ):
         # 文件不存在则创建
         if not os.path.exists(os.path.dirname(logPath)):
             os.makedirs(os.path.dirname(logPath))
         if not os.path.exists(logPath):
-            with open(logPath, 'w', encoding='UTF-8') as f:
-                f.write('')
+            with open(logPath, "w", encoding="UTF-8") as f:
+                f.write("")
 
         # self._fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
-        self._fmt = '%(message)s'
+        self._fmt = "%(message)s"
 
         def custom_namer(default_name):
             base_filename, ext, date = default_name.split(".")
             return f"{base_filename}.{date}.{ext}"
 
         handler = TimedRotatingFileHandler(
-            logPath, when=when, backupCount=backupCount, encoding='UTF-8')
+            logPath, when=when, backupCount=backupCount, encoding="UTF-8"
+        )
         handler.namer = custom_namer
 
         logging.basicConfig(
             level=logging.INFO,
             format=self._fmt,
-            handlers=[
-                RichHandler(console=console),
-                handler
-            ]
+            handlers=[RichHandler(console=console), handler],
         )
         self.logger = logging.getLogger(__name__)
 
@@ -171,38 +176,38 @@ def init_download():
         f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={Args.CATEGORIES}"
         f"&sorting={Args.MODE}&ratios={Args.RATIOS}&purity=100&atleast=1000x1000&topRange=1w&page="
     )
-    log.info(wallhaven_url_base.split('&', 1)[1])
+    log.info(wallhaven_url_base.split("&", 1)[1])
     # log.info(wallhaven_url_base)
     # 创建文件保存目录
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
 def format_time(atime: Optional[float] = None) -> str:
-    '''
+    """
     :param atime: 时间戳秒数，或为 None 以格式化当前时间。
     :return: 格式为 "YYYY-MM-DD HH:MM:SS" 的字符串。
-    '''
+    """
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(atime))
 
 
 def file_size(size_in_bytes: int) -> str:
-    '''
+    """
     计算文件大小并返回以MB为单位的字符串表示。
 
     :param size_in_bytes: 文件大小（字节）
     :return: 以"X.XXMB"格式表示的文件大小
-    '''
+    """
     size_in_mb = size_in_bytes / float(1024 * 1024)
     return f"{round(size_in_mb, 2)}MB"
 
 
 def dir_size(path: str | os.PathLike) -> str | int:
-    '''
+    """
     计算指定目录的大小。
 
     :param path: 要计算大小的目录路径。
     :return: 表示目录大小的字符串，格式为 "X.XXMB"。
-    '''
+    """
     size = 0
     if os.path.isdir(path):
         try:
@@ -220,11 +225,11 @@ def dir_size(path: str | os.PathLike) -> str | int:
 
 
 def dir_info(path: str | os.PathLike):
-    '''
+    """
     记录目录的信息。
 
     :param path: 要记录信息的目录路径。
-    '''
+    """
     if os.path.exists(path):
         if os.path.isdir(path):
             log.info(f"<图片目录:{path}> <大小:{dir_size(path)}>")
@@ -235,11 +240,11 @@ def dir_info(path: str | os.PathLike):
 
 
 def remove_file(file: str | os.PathLike):
-    '''
+    """
     移除文件。
 
     :param file: 要移除的文件路径。
-    '''
+    """
     if os.path.exists(file):
         if os.path.isfile(file):
             os.remove(file)
@@ -251,12 +256,12 @@ def remove_file(file: str | os.PathLike):
 
 
 def clean_up(path=Args.SAVE_PATH, max_files=96):
-    '''
+    """
     清理目录中的文件，移除旧文件。
 
     :param path: 要清理的目录路径，默认为 args.savePath。
     :param max_files: 要保留的最大文件数量，默认为 96。
-    '''
+    """
     log.info("清理文件")
     if os.path.exists(path):
         dir_info(path)
@@ -277,11 +282,11 @@ def clean_up(path=Args.SAVE_PATH, max_files=96):
 
 
 def handle_server_response(response_bytes) -> dict | None:
-    '''
+    """
     处理来自服务器的响应。
     :param response_bytes: 服务器返回的字节数据。
     :return: 如果解码和解析成功则返回解析后的 JSON 对象，否则返回 None。
-    '''
+    """
     try:
         response_str = response_bytes.decode("utf-8")
         response_dict = json.loads(response_str)
@@ -295,7 +300,7 @@ def copy_url(task_id: TaskID, url: str, path: str | os.PathLike) -> None:
     """Copy data from a url to a local file."""
     # progress.console.log(f"Requesting {url}")
     try:
-        req = Request(url, headers={'User-Agent': "Magic Browser"})
+        req = Request(url, headers={"User-Agent": "Magic Browser"})
         response = urlopen(req, timeout=60)
     except URLError as e:
         log.error(f"There was an error: {e}")
@@ -304,7 +309,7 @@ def copy_url(task_id: TaskID, url: str, path: str | os.PathLike) -> None:
     with open(path, "wb") as dest_file:
         progress.start_task(task_id)
         progress.update(task_id, visible=True)
-        for data in iter(partial(response.read, 1024*32), b""):
+        for data in iter(partial(response.read, 1024 * 32), b""):
             dest_file.write(data)
             progress.update(task_id, advance=len(data))
             if done_event.is_set():
@@ -321,22 +326,23 @@ def download(urls: Iterable[str], dest_dir: str = Args.SAVE_PATH):
                 filename = url.split("/")[-1]
                 dest_path = os.path.join(dest_dir, filename)
                 task_id = progress.add_task(
-                    "download", filename=filename, start=False, visible=False)
+                    "download", filename=filename, start=False, visible=False
+                )
                 pool.submit(copy_url, task_id, url, dest_path)
                 # print(f"downloading {filename}")
 
 
 def download_one_pic(target_pic: dict):
-    '''
+    """
     下载指定 URL 的单张图片到指定路径。
 
     :param target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
-    '''
-    pic_id = target_pic['id']
-    resolution = target_pic['resolution']
-    url = target_pic['url']
+    """
+    pic_id = target_pic["id"]
+    resolution = target_pic["resolution"]
+    url = target_pic["url"]
     filename = url.split("/")[-1]
-    filesize = target_pic['file_size']
+    filesize = target_pic["file_size"]
     # pic_type = target_pic['file_type']
     # pic_path = f"{Args.SAVE_PATH}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
     pic_path = f"{Args.SAVE_PATH}/{filename}"
@@ -344,12 +350,14 @@ def download_one_pic(target_pic: dict):
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.debug(
-            f"图片已存在 <{filename}> <{file_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>")
+            f"图片已存在 <{filename}> <{file_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>"
+        )
         if file_info.st_size == filesize:
             return
         else:
             log.warning(
-                f"图片不完整，重新下载 <{filename}> <{file_info.st_size} -> {filesize}>")
+                f"图片不完整，重新下载 <{filename}> <{file_info.st_size} -> {filesize}>"
+            )
         # if is_valid_image(pic_path):
         #     return
     # wget(url, pic_path)
@@ -358,12 +366,12 @@ def download_one_pic(target_pic: dict):
 
 
 def get_pending_pic_url(wallhaven_url: str) -> list:
-    '''
+    """
     从 Wallhaven API 检索待处理的图片 URL 列表。
 
     :param wallhaven_url: 查询图片数据的 URL。
     :return: 包含图片元数据（ID、分辨率、URL 和文件类型）的字典列表。
-    '''
+    """
     # response_res = requests.get(wallhaven_url, proxies=proxies).content
     response_res = requests.get(wallhaven_url).content
     response_res_dict = handle_server_response(response_res)
@@ -373,26 +381,26 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
         raise Exception("获取图片列表失败")  # 使用异常处理代替 exit(1)
     for pic_msg in response_res_dict["data"]:
         pic_msg_main = {
-            'id': pic_msg['id'],
-            'resolution': pic_msg['resolution'],
-            'url': pic_msg['path'],
-            'file_type': pic_msg['file_type'],    # image/png image/jpeg
-            'file_size': pic_msg['file_size'],
+            "id": pic_msg["id"],
+            "resolution": pic_msg["resolution"],
+            "url": pic_msg["path"],
+            "file_type": pic_msg["file_type"],  # image/png image/jpeg
+            "file_size": pic_msg["file_size"],
         }
         pending_pic_url_list.append(pic_msg_main)
     return pending_pic_url_list
 
 
 def download_all_pic_in_one_page():
-    '''从 Wallhaven 下载指定页面范围的所有图像。'''
+    """从 Wallhaven 下载指定页面范围的所有图像。"""
     urls = []
-    for page_num in range(1, int(Args.MAX_PAGE)+1):
+    for page_num in range(1, int(Args.MAX_PAGE) + 1):
         wallhaven_url = wallhaven_url_base + str(page_num)
         pending_pic_url_list = get_pending_pic_url(wallhaven_url)
         num = 0
         for target_pic in pending_pic_url_list:
             url = download_one_pic(target_pic)
-            if (url):
+            if url:
                 urls.append(url)
                 num += 1
         log.info(f"下载第{page_num}页图片: {num}/{len(pending_pic_url_list)}")
