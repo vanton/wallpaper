@@ -11,6 +11,10 @@ Modified By: vanton
 Copyright (c) 2024
 """
 
+from __future__ import annotations
+import aiohttp
+import aiofiles
+import asyncio
 import json
 import logging
 import os
@@ -18,14 +22,11 @@ import os.path
 import requests
 import signal
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from functools import partial
 from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
 from threading import Event
 from typing import Iterable, Optional
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import (
@@ -33,7 +34,6 @@ from rich.progress import (
     DownloadColumn,
     Progress,
     SpinnerColumn,
-    TaskID,
     TextColumn,
     TimeRemainingColumn,
     TransferSpeedColumn,
@@ -184,8 +184,11 @@ def init_download():
 
 def format_time(atime: Optional[float] = None) -> str:
     """
-    :param atime: 时间戳秒数，或为 None 以格式化当前时间。
-    :return: 格式为 "YYYY-MM-DD HH:MM:SS" 的字符串。
+    Args:
+        atime: 时间戳秒数，或为 None 以格式化当前时间。
+
+    Returns:
+        格式为 "YYYY-MM-DD HH:MM:SS" 的字符串。
     """
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(atime))
 
@@ -194,19 +197,25 @@ def file_size(size_in_bytes: int) -> str:
     """
     计算文件大小并返回以MB为单位的字符串表示。
 
-    :param size_in_bytes: 文件大小（字节）
-    :return: 以"X.XXMB"格式表示的文件大小
+    Args:
+        size_in_bytes: 文件大小（字节）
+
+    Returns:
+        以"X.XX MB"格式表示的文件大小
     """
     size_in_mb = size_in_bytes / float(1024 * 1024)
-    return f"{round(size_in_mb, 2)}MB"
+    return f"{round(size_in_mb, 2)} MB"
 
 
 def dir_size(path: str | os.PathLike) -> str | int:
     """
     计算指定目录的大小。
 
-    :param path: 要计算大小的目录路径。
-    :return: 表示目录大小的字符串，格式为 "X.XXMB"。
+    Args:
+        path: 要计算大小的目录路径。
+
+    Returns:
+        表示目录大小的字符串，格式为 "X.XX MB"。
     """
     size = 0
     if os.path.isdir(path):
@@ -228,7 +237,8 @@ def dir_info(path: str | os.PathLike):
     """
     记录目录的信息。
 
-    :param path: 要记录信息的目录路径。
+    Args:
+        path: 要记录信息的目录路径。
     """
     if os.path.exists(path):
         if os.path.isdir(path):
@@ -243,7 +253,8 @@ def remove_file(file: str | os.PathLike):
     """
     移除文件。
 
-    :param file: 要移除的文件路径。
+    Args:
+        file: 要移除的文件路径。
     """
     if os.path.exists(file):
         if os.path.isfile(file):
@@ -259,8 +270,9 @@ def clean_up(path=Args.SAVE_PATH, max_files=96):
     """
     清理目录中的文件，移除旧文件。
 
-    :param path: 要清理的目录路径，默认为 args.savePath。
-    :param max_files: 要保留的最大文件数量，默认为 96。
+    Args:
+        path: 要清理的目录路径，默认为 args.savePath。
+        max_files: 要保留的最大文件数量，默认为 96。
     """
     log.info("清理文件")
     if os.path.exists(path):
@@ -284,8 +296,12 @@ def clean_up(path=Args.SAVE_PATH, max_files=96):
 def handle_server_response(response_bytes) -> dict | None:
     """
     处理来自服务器的响应。
-    :param response_bytes: 服务器返回的字节数据。
-    :return: 如果解码和解析成功则返回解析后的 JSON 对象，否则返回 None。
+
+    Args:
+        response_bytes: 服务器返回的字节数据。
+
+    Returns:
+        如果解码和解析成功则返回解析后的 JSON 对象，否则返回 None。
     """
     try:
         response_str = response_bytes.decode("utf-8")
@@ -296,47 +312,139 @@ def handle_server_response(response_bytes) -> dict | None:
         return None
 
 
-def copy_url(task_id: TaskID, url: str, path: str | os.PathLike) -> None:
-    """Copy data from a url to a local file."""
-    # progress.console.log(f"Requesting {url}")
+@dataclass
+class DownloadTask:
+    """Represents a download task with its metadata"""
+
+    task_id: str
+    url: str
+    path: Path
+    chunk_size: int = 32 * 1024  # 32KB chunks
+    timeout: int = 60
+    headers: dict = None
+
+    def __post_init__(self):
+        self.headers = self.headers or {"User-Agent": "Magic Browser"}
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+
+async def copy_url_async(task: DownloadTask) -> Optional[str]:
+    """
+    Asynchronously copy data from a URL to a local file.
+
+    Args:
+        task: DownloadTask containing download parameters
+
+    Returns:
+        Optional[str]: Task ID if successful, None if failed
+    """
     try:
-        req = Request(url, headers={"User-Agent": "Magic Browser"})
-        response = urlopen(req, timeout=60)
-    except URLError as e:
-        log.error(f"There was an error: {e}")
-    # This will break if the response doesn't contain content length
-    progress.update(task_id, total=int(response.info()["Content-length"]))
-    with open(path, "wb") as dest_file:
-        progress.start_task(task_id)
-        progress.update(task_id, visible=True)
-        for data in iter(partial(response.read, 1024 * 32), b""):
-            dest_file.write(data)
-            progress.update(task_id, advance=len(data))
-            if done_event.is_set():
-                return task_id
-        # progress.remove_task(task_id)
-    # progress.console.log(f"Downloaded {path}")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                task.url, headers=task.headers, timeout=task.timeout
+            ) as response:
+                if response.status != 200:
+                    log.error(f"HTTP {response.status} for {task.url}")
+                    return None
+                total_size = int(response.headers.get("Content-Length", 0))
+                progress.update(task.task_id, total=total_size)
+                async with aiofiles.open(task.path, "wb") as dest_file:
+                    progress.start_task(task.task_id)
+                    progress.update(task.task_id, visible=True)
+                    downloaded = 0
+                    async for chunk in response.content.iter_chunked(task.chunk_size):
+                        if done_event.is_set():
+                            return task.task_id
+                        await dest_file.write(chunk)
+                        downloaded += len(chunk)
+                        progress.update(task.task_id, advance=len(chunk))
+                    if downloaded == total_size:
+                        return task.task_id
+                    else:
+                        log.warning(f"Incomplete download for {task.url}")
+                        return None
+    except asyncio.TimeoutError:
+        log.error(f"Timeout downloading {task.url}")
+    except aiohttp.ClientError as e:
+        log.error(f"Network error for {task.url}: {e}")
+    except Exception as e:
+        log.error(f"Unexpected error downloading {task.url}: {e}")
+    return None
+
+
+async def download_with_retries(
+    task: DownloadTask, max_retries: int = 3
+) -> Optional[str]:
+    """Attempt to download with retries on failure"""
+    for attempt in range(max_retries):
+        if attempt > 0:
+            await asyncio.sleep(2**attempt)  # Exponential backoff
+            log.warning(f"Retry {attempt + 1}/{max_retries} for {task.url}")
+            progress.reset(task.task_id, start=True)
+        result = await copy_url_async(task)
+        if result:
+            return result
+    return None
+
+
+async def download_async(
+    urls: Iterable[str], dest_dir: str = Args.SAVE_PATH, max_concurrent: int = 4
+):
+    """
+    Download multiple files concurrently to the given directory.
+
+    Args:
+        urls: Iterable of URLs to download
+        dest_dir: Destination directory
+        max_concurrent: Maximum number of concurrent downloads
+    """
+    dest_path = Path(dest_dir)
+    dest_path.mkdir(parents=True, exist_ok=True)
+    semaphore = asyncio.Semaphore(max_concurrent)
+    tasks = []
+
+    async def bounded_download(task: DownloadTask):
+        async with semaphore:
+            return await download_with_retries(task)
+
+    with progress:
+        for url in urls:
+            filename = url.split("/")[-1]
+            task_id = progress.add_task(
+                "download", filename=filename, start=False, visible=False
+            )
+            download_task = DownloadTask(
+                task_id=task_id, url=url, path=dest_path / filename
+            )
+            tasks.append(bounded_download(download_task))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Handle any exceptions that occurred
+        for url, result in zip(urls, results):
+            if isinstance(result, Exception):
+                log.error(f"Failed to download {url}: {result}")
 
 
 def download(urls: Iterable[str], dest_dir: str = Args.SAVE_PATH):
-    """Download multiple files to the given directory."""
-    with progress:
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            for url in urls:
-                filename = url.split("/")[-1]
-                dest_path = os.path.join(dest_dir, filename)
-                task_id = progress.add_task(
-                    "download", filename=filename, start=False, visible=False
-                )
-                pool.submit(copy_url, task_id, url, dest_path)
-                # print(f"downloading {filename}")
+    """
+    Entry point for downloads - runs async code in event loop
+    """
+    try:
+        asyncio.run(download_async(urls, dest_dir))
+    except KeyboardInterrupt:
+        log.info("Download interrupted by user")
+        done_event.set()
+    except Exception as e:
+        log.error(f"Download failed: {e}")
+        done_event.set()
 
 
 def download_one_pic(target_pic: dict):
     """
     下载指定 URL 的单张图片到指定路径。
 
-    :param target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
+    Args:
+        target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
     """
     pic_id = target_pic["id"]
     resolution = target_pic["resolution"]
@@ -368,8 +476,11 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
     """
     从 Wallhaven API 检索待处理的图片 URL 列表。
 
-    :param wallhaven_url: 查询图片数据的 URL。
-    :return: 包含图片元数据（ID、分辨率、URL 和文件类型）的字典列表。
+    Args:
+        wallhaven_url: 查询图片数据的 URL。
+
+    Returns:
+        list: 包含图片元数据（ID、分辨率、URL 和文件类型）的字典列表。
     """
     # response_res = requests.get(wallhaven_url, proxies=proxies).content
     response_res = requests.get(wallhaven_url).content
