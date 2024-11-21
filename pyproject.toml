@@ -15,7 +15,6 @@ python = "^3.10"
 rich = "^13.9.4"
 logging = "^0.4.9.6"
 requests = "^2.32.3"
-typing-extensions = "^4.12.2"
 aiohttp = "^3.11.6"
 aiofiles = "^24.1.0"
 

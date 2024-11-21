@@ -22,11 +22,11 @@ import os.path
 import requests
 import signal
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from threading import Event
-from typing import Iterable, Optional
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import (
@@ -182,7 +182,7 @@ def init_download():
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
-def format_time(atime: Optional[float] = None) -> str:
+def format_time(atime: float = None) -> str:
     """
     Args:
         atime: 时间戳秒数，或为 None 以格式化当前时间。
@@ -328,7 +328,7 @@ class DownloadTask:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
 
-async def copy_url_async(task: DownloadTask) -> Optional[str]:
+async def copy_url_async(task: DownloadTask) -> str | None:
     """
     Asynchronously copy data from a URL to a local file.
 
@@ -336,7 +336,7 @@ async def copy_url_async(task: DownloadTask) -> Optional[str]:
         task: DownloadTask containing download parameters
 
     Returns:
-        Optional[str]: Task ID if successful, None if failed
+        Task ID if successful, None if failed
     """
     try:
         async with aiohttp.ClientSession() as session:
@@ -372,9 +372,7 @@ async def copy_url_async(task: DownloadTask) -> Optional[str]:
     return None
 
 
-async def download_with_retries(
-    task: DownloadTask, max_retries: int = 3
-) -> Optional[str]:
+async def download_with_retries(task: DownloadTask, max_retries: int = 3) -> str | None:
     """Attempt to download with retries on failure"""
     for attempt in range(max_retries):
         if attempt > 0:
