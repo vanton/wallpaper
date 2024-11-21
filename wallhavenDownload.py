@@ -140,10 +140,10 @@ class Log:
             with open(logPath, "w", encoding="UTF-8") as f:
                 f.write("")
 
-        # self._fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
-        self._fmt = "%(message)s"
+        # _fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
+        _fmt = "%(message)s"
 
-        def custom_namer(default_name):
+        def custom_namer(default_name) -> str:
             base_filename, ext, date = default_name.split(".")
             return f"{base_filename}.{date}.{ext}"
 
@@ -154,7 +154,7 @@ class Log:
 
         logging.basicConfig(
             level=logging.INFO,
-            format=self._fmt,
+            format=_fmt,
             handlers=[RichHandler(console=console), handler],
         )
         self.logger = logging.getLogger(__name__)
@@ -182,7 +182,7 @@ def init_download():
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
-def format_time(atime: float = None) -> str:
+def format_time(atime: float | None = None) -> str:
     """
     Args:
         atime: 时间戳秒数，或为 None 以格式化当前时间。
@@ -372,7 +372,7 @@ async def copy_url_async(task: DownloadTask) -> str | None:
     return None
 
 
-async def download_with_retries(task: DownloadTask, max_retries: int = 3) -> str | None:
+async def download_with_retries(task: DownloadTask, max_retries=3) -> str | None:
     """Attempt to download with retries on failure"""
     for attempt in range(max_retries):
         if attempt > 0:
@@ -386,7 +386,7 @@ async def download_with_retries(task: DownloadTask, max_retries: int = 3) -> str
 
 
 async def download_async(
-    urls: Iterable[str], dest_dir: str = Args.SAVE_PATH, max_concurrent: int = 4
+    urls: Iterable[str], dest_dir=Args.SAVE_PATH, max_concurrent=4
 ):
     """
     Download multiple files concurrently to the given directory.
@@ -401,7 +401,7 @@ async def download_async(
     semaphore = asyncio.Semaphore(max_concurrent)
     tasks = []
 
-    async def bounded_download(task: DownloadTask):
+    async def bounded_download(task: DownloadTask) -> str | None:
         async with semaphore:
             return await download_with_retries(task)
 
@@ -423,7 +423,7 @@ async def download_async(
                 log.error(f"Failed to download {url}: {result}")
 
 
-def download(urls: Iterable[str], dest_dir: str = Args.SAVE_PATH):
+def download(urls: Iterable[str], dest_dir=Args.SAVE_PATH):
     """
     Entry point for downloads - runs async code in event loop
     """
@@ -437,20 +437,26 @@ def download(urls: Iterable[str], dest_dir: str = Args.SAVE_PATH):
         done_event.set()
 
 
-def download_one_pic(target_pic: dict):
+@dataclass
+class TargetPic:
+    id: str
+    resolution: str
+    url: str
+    file_size: int
+
+
+def download_one_pic(target_pic: TargetPic) -> None | str:
     """
     下载指定 URL 的单张图片到指定路径。
 
     Args:
         target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
     """
-    pic_id = target_pic["id"]
-    resolution = target_pic["resolution"]
-    url = target_pic["url"]
+    pic_id = target_pic.id
+    resolution = target_pic.resolution
+    url = target_pic.url
     filename = url.split("/")[-1]
-    filesize = target_pic["file_size"]
-    # pic_type = target_pic['file_type']
-    # pic_path = f"{Args.SAVE_PATH}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
+    filesize = target_pic.file_size
     pic_path = f"{Args.SAVE_PATH}/{filename}"
     log.debug(f"<{pic_id}> <{resolution}> {url}")
     if os.path.isfile(pic_path):
@@ -488,13 +494,12 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
         log.critical("获取图片列表失败")
         raise Exception("获取图片列表失败")  # 使用异常处理代替 exit(1)
     for pic_msg in response_res_dict["data"]:
-        pic_msg_main = {
-            "id": pic_msg["id"],
-            "resolution": pic_msg["resolution"],
-            "url": pic_msg["path"],
-            "file_type": pic_msg["file_type"],  # image/png image/jpeg
-            "file_size": pic_msg["file_size"],
-        }
+        pic_msg_main = TargetPic(
+            id=pic_msg["id"],
+            resolution=pic_msg["resolution"],
+            url=pic_msg["path"],
+            file_size=pic_msg["file_size"],
+        )
         pending_pic_url_list.append(pic_msg_main)
     return pending_pic_url_list
 
