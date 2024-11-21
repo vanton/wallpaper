@@ -7,8 +7,11 @@
         "levelname",
         "levelno",
         "psutil",
+        "signum",
         "toplist",
+        "trange",
         "wallhaven",
+        "wrapmodule",
         "XGET"
     ],
     "python.analysis.autoImportCompletions": true,

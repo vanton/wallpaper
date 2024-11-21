@@ -1,7 +1,7 @@
 '''
 Filename: /wallhavenDownload.py
 Project: wallpaper
-Version: v0.9.0
+Version: v0.9.1
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
@@ -18,7 +18,6 @@ import os.path
 import requests
 import signal
 import time
-from PIL import Image
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
@@ -26,18 +25,19 @@ from logging.handlers import TimedRotatingFileHandler
 from threading import Event
 from typing import (Iterable, Optional)
 from urllib.error import URLError
-from urllib.request import Request, urlopen
+from urllib.request import (Request, urlopen)
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.progress import (
     BarColumn,
     DownloadColumn,
     Progress,
+    SpinnerColumn,
     TaskID,
     TextColumn,
     TimeRemainingColumn,
     TransferSpeedColumn,
 )
-from rich.logging import RichHandler
 
 from APIKey import APIKey
 
@@ -100,6 +100,7 @@ pic_type_map = {
 console = Console()
 progress = Progress(
     TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+    SpinnerColumn(),
     BarColumn(bar_width=None),
     "[progress.percentage]{task.percentage:>3.1f}%",
     "•",
@@ -108,7 +109,6 @@ progress = Progress(
     TransferSpeedColumn(),
     "•",
     TimeRemainingColumn(),
-    # transient=True
 )
 done_event = Event()
 
@@ -126,12 +126,6 @@ class Log:
     # when 轮换时间 S: 秒 M: 分 H: 小时 D: 天 W: 周
 
     def __init__(self, logPath=log_path, when=when, maxBytes=1024*1000, backupCount=backup_count):
-        '''
-        :param logPath: The path where the log file will be stored.
-        :param when: The interval for rotating the log file (e.g., 'H' for hourly).
-        :param maxBytes: The maximum file size for log rotation by size (unused in current implementation).
-        :param backupCount: The number of backup log files to keep.
-        '''
         # 文件不存在则创建
         if not os.path.exists(os.path.dirname(logPath)):
             os.makedirs(os.path.dirname(logPath))
@@ -142,13 +136,20 @@ class Log:
         # self._fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
         self._fmt = '%(message)s'
 
+        def custom_namer(default_name):
+            base_filename, ext, date = default_name.split(".")
+            return f"{base_filename}.{date}.{ext}"
+
+        handler = TimedRotatingFileHandler(
+            logPath, when=when, backupCount=backupCount, encoding='UTF-8')
+        handler.namer = custom_namer
+
         logging.basicConfig(
             level=logging.INFO,
             format=self._fmt,
             handlers=[
                 RichHandler(console=console),
-                TimedRotatingFileHandler(
-                    logPath, when=when, backupCount=backupCount, encoding='UTF-8')
+                handler
             ]
         )
         self.logger = logging.getLogger(__name__)
@@ -170,8 +171,7 @@ def init_download():
         f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={Args.CATEGORIES}"
         f"&sorting={Args.MODE}&ratios={Args.RATIOS}&purity=100&atleast=1000x1000&topRange=1w&page="
     )
-    # log.info(wallhaven_url_base.split('&', 1)[1])
-    log.info(wallhaven_url_base)
+    log.info(wallhaven_url_base.split('&', 1)[1])
     # log.info(wallhaven_url_base)
     # 创建文件保存目录
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
@@ -215,7 +215,7 @@ def dir_size(path: str | os.PathLike) -> str | int:
             )
             size = file_size(size)
         except Exception as e:
-            print(f"发生错误: {e}")
+            log.error(f"发生错误: {e}")
     return size
 
 
@@ -291,49 +291,25 @@ def handle_server_response(response_bytes) -> dict | None:
         return None
 
 
-# def is_valid_image(file: str | os.PathLike) -> bool:
-#     '''
-#     检查文件是否是有效图像。
-
-#     打开给定的文件并验证它是否是有效的图像格式。
-#     支持文件路径和类文件对象。
-
-#     Parameters:
-#         file (str or os.PathLike or file-like object): The file to check.
-
-#     Returns:
-#         bool: True if the file is a valid image, False otherwise.
-#     '''
-#     b_valid = True
-#     if isinstance(file, (str, os.PathLike)):
-#         fileObj = open(file, 'rb')
-#     else:
-#         fileObj = file
-#     try:
-#         Image.open(fileObj).verify()
-#     except:
-#         b_valid = False
-#     return b_valid
-
-
 def copy_url(task_id: TaskID, url: str, path: str | os.PathLike) -> None:
     """Copy data from a url to a local file."""
     # progress.console.log(f"Requesting {url}")
     try:
         req = Request(url, headers={'User-Agent': "Magic Browser"})
-        response = urlopen(req, timeout=5)
+        response = urlopen(req, timeout=60)
     except URLError as e:
-        raise (f"There was an error: {e}")
+        log.error(f"There was an error: {e}")
     # This will break if the response doesn't contain content length
     progress.update(task_id, total=int(response.info()["Content-length"]))
     with open(path, "wb") as dest_file:
         progress.start_task(task_id)
-        for data in iter(partial(response.read, 102400), b""):
+        progress.update(task_id, visible=True)
+        for data in iter(partial(response.read, 1024*32), b""):
             dest_file.write(data)
             progress.update(task_id, advance=len(data))
             if done_event.is_set():
-                return
-        progress.remove_task(task_id)
+                return task_id
+        # progress.remove_task(task_id)
     # progress.console.log(f"Downloaded {path}")
 
 
@@ -345,7 +321,7 @@ def download(urls: Iterable[str], dest_dir: str = Args.SAVE_PATH):
                 filename = url.split("/")[-1]
                 dest_path = os.path.join(dest_dir, filename)
                 task_id = progress.add_task(
-                    "download", filename=filename, start=False)
+                    "download", filename=filename, start=False, visible=False)
                 pool.submit(copy_url, task_id, url, dest_path)
                 # print(f"downloading {filename}")
 
@@ -356,28 +332,28 @@ def download_one_pic(target_pic: dict):
 
     :param target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
     '''
-    # pic_id = target_pic['id']
-    # resolution = target_pic['resolution']
+    pic_id = target_pic['id']
+    resolution = target_pic['resolution']
     url = target_pic['url']
     filename = url.split("/")[-1]
     filesize = target_pic['file_size']
     # pic_type = target_pic['file_type']
     # pic_path = f"{Args.SAVE_PATH}/{resolution}_{pic_id}.{pic_type_map[pic_type]}"
     pic_path = f"{Args.SAVE_PATH}/{filename}"
-    # log.info(f"<{pic_id}> <{resolution}> {url}")
+    log.debug(f"<{pic_id}> <{resolution}> {url}")
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
-        log.warning(
-            # f"图片已存在 <{filename}> <{file_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>")
-            f"图片已存在 <{filename}> <{file_info.st_size} -> {filesize}> <{format_time(file_info.st_atime)}>")
+        log.debug(
+            f"图片已存在 <{filename}> <{file_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>")
         if file_info.st_size == filesize:
             return
         else:
-            log.error(f">>> 图片不完整，重新下载 <{filename}> <<<")
+            log.warning(
+                f"图片不完整，重新下载 <{filename}> <{file_info.st_size} -> {filesize}>")
         # if is_valid_image(pic_path):
         #     return
     # wget(url, pic_path)
-    # log.info("图片下载成功")
+    log.debug("图片下载成功")
     return url
 
 
@@ -407,28 +383,26 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
     return pending_pic_url_list
 
 
-def download_all_pic_in_one_page(page_num):
-    '''
-    从 Wallhaven 下载单个页面上的所有图像。
-
-    :param pageNum: 下载图像的页码。
-    '''
-    # log.info(f"正在下载第{page_num}页图片")
-    wallhaven_url = wallhaven_url_base + str(page_num)
-    pending_pic_url_list = get_pending_pic_url(wallhaven_url)
+def download_all_pic_in_one_page():
+    '''从 Wallhaven 下载指定页面范围的所有图像。'''
     urls = []
-    for target_pic in pending_pic_url_list:
-        url = download_one_pic(target_pic)
-        if (url):
-            urls.append(url)
+    for page_num in range(1, int(Args.MAX_PAGE)+1):
+        wallhaven_url = wallhaven_url_base + str(page_num)
+        pending_pic_url_list = get_pending_pic_url(wallhaven_url)
+        num = 0
+        for target_pic in pending_pic_url_list:
+            url = download_one_pic(target_pic)
+            if (url):
+                urls.append(url)
+                num += 1
+        log.info(f"下载第{page_num}页图片: {num}/{len(pending_pic_url_list)}")
     download(urls)
-    # log.info(f"第{page_num}页图片下载完成")
+    # log.debug(f"{page_num}页图片下载完成")
 
 
 def wallhaven_download():
     init_download()
-    for pageNum in range(1, int(Args.MAX_PAGE)+1):
-        download_all_pic_in_one_page(pageNum)
+    download_all_pic_in_one_page()
 
 
 if __name__ == "__main__":
