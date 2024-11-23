@@ -1,7 +1,7 @@
 """
 Filename: /wallhavenDownload.py
 Project: wallpaper
-Version: v0.9.2
+Version: v0.9.3
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
@@ -11,18 +11,16 @@ Modified By: vanton
 Copyright (c) 2024
 """
 
-from __future__ import annotations
 import aiohttp
 import aiofiles
 import asyncio
 import json
 import logging
 import os
-import os.path
 import requests
 import signal
 import time
-from collections.abc import Iterable
+from typing import Iterable, Optional
 from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -78,7 +76,7 @@ class Args:
 
 #!##############################################################################
 # 配置
-when = "H"  # 按小时日志
+when = "D"  # 按天轮换日志
 backup_count = 5  # 保留日志文件数量
 log_path = "./log/wallhavenDownload.log"
 wallhaven_url_base = ""
@@ -102,7 +100,7 @@ console = Console()
 progress = Progress(
     TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
     SpinnerColumn(),
-    BarColumn(bar_width=None),
+    BarColumn(),
     "[progress.percentage]{task.percentage:>3.1f}%",
     "•",
     DownloadColumn(),
@@ -182,7 +180,7 @@ def init_download():
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
-def format_time(atime: float | None = None) -> str:
+def format_time(atime: Optional[float] = None) -> str:
     """
     Args:
         atime: 时间戳秒数，或为 None 以格式化当前时间。
@@ -293,7 +291,7 @@ def clean_up(path=Args.SAVE_PATH, max_files=96):
         log.error(f"文件不存在: {path}")
 
 
-def handle_server_response(response_bytes) -> dict | None:
+def handle_server_response(response_bytes) -> Optional[dict]:
     """
     处理来自服务器的响应。
 
@@ -328,7 +326,7 @@ class DownloadTask:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
 
-async def copy_url_async(task: DownloadTask) -> str | None:
+async def copy_url_async(task: DownloadTask) -> Optional[str]:
     """
     Asynchronously copy data from a URL to a local file.
 
@@ -372,7 +370,7 @@ async def copy_url_async(task: DownloadTask) -> str | None:
     return None
 
 
-async def download_with_retries(task: DownloadTask, max_retries=3) -> str | None:
+async def download_with_retries(task: DownloadTask, max_retries=3) -> Optional[str]:
     """Attempt to download with retries on failure"""
     for attempt in range(max_retries):
         if attempt > 0:
@@ -401,7 +399,7 @@ async def download_async(
     semaphore = asyncio.Semaphore(max_concurrent)
     tasks = []
 
-    async def bounded_download(task: DownloadTask) -> str | None:
+    async def bounded_download(task: DownloadTask) -> Optional[str]:
         async with semaphore:
             return await download_with_retries(task)
 
@@ -445,7 +443,7 @@ class TargetPic:
     file_size: int
 
 
-def download_one_pic(target_pic: TargetPic) -> None | str:
+def download_one_pic(target_pic: TargetPic) -> Optional[str]:
     """
     下载指定 URL 的单张图片到指定路径。
 
@@ -509,7 +507,7 @@ def download_all_pics():
     urls = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
         wallhaven_url = wallhaven_url_base + str(page_num)
-        pending_pic_url_list = get_pending_pic_url(wallhaven_url)
+        pending_pic_url_list: list[TargetPic] = get_pending_pic_url(wallhaven_url)
         num = 0
         for target_pic in pending_pic_url_list:
             url = download_one_pic(target_pic)
