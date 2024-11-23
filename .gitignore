@@ -1,7 +1,8 @@
-Pic/*.*
-log/*.*
 __pycache__
 .venv
+Pic/*.*
+log/*.*
+tmp/**
 APIKey.py
 *.lock
-tmp/**
+!.keep
