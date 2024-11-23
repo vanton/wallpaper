@@ -1,8 +1,12 @@
 {
     "cSpell.words": [
         "addrs",
+        "aiofiles",
+        "aiohttp",
+        "asyncio",
         "atleast",
         "DGRAM",
+        "endofscript",
         "gethostname",
         "levelname",
         "levelno",

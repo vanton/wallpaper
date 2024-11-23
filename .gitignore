@@ -3,4 +3,5 @@ log/*.*
 __pycache__
 .venv
 APIKey.py
-/*.lock
+*.lock
+tmp/**
