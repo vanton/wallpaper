@@ -1,7 +1,7 @@
-﻿@echo off
+﻿@ECHO OFF
 setlocal EnableDelayedExpansion
 
-:: Initialize variables
+:: #ANCHOR - Initialize variables
 if not defined SCHEDULER set "SCHEDULER=0"
 if not defined PYTHON set "PYTHON=python"
 if defined GIT set "GIT_PYTHON_GIT_EXECUTABLE=%GIT%"
@@ -9,17 +9,17 @@ if not defined VENV_DIR set "VENV_DIR=%~dp0%.venv"
 set "ERROR_REPORTING=FALSE"
 set "TEMP_DIR=%~dp0tmp"
 
-:: Create temp directory if it doesn't exist
+:: #ANCHOR - Create temp directory if it doesn't exist
 if not exist "%TEMP_DIR%" mkdir "%TEMP_DIR%"
 
-:: Check Python installation
+:: #ANCHOR - Check Python installation
 %PYTHON% -c "" >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"
 if errorlevel 1 (
     echo Error: Python is not available
     goto :error_handler
 )
 
-:: Check/Install pip
+:: #ANCHOR - Check/Install pip
 %PYTHON% -mpip --help >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"
 if errorlevel 1 (
     if not "%PIP_INSTALLER_LOCATION%"=="" (
@@ -34,7 +34,7 @@ if errorlevel 1 (
     )
 )
 
-:: Virtual Environment Setup
+:: #ANCHOR - Virtual Environment Setup
 if not "%VENV_DIR%"=="-" if not "%SKIP_VENV%"=="1" (
     if not exist "%VENV_DIR%\Scripts\Python.exe" (
         for /f "delims=" %%i in ('"%PYTHON%" -c "import sys; print(sys.executable)"') do set "PYTHON_FULLNAME=%%i"
@@ -55,7 +55,7 @@ if not "%VENV_DIR%"=="-" if not "%SKIP_VENV%"=="1" (
     echo Using venv: %PYTHON%
 )
 
-:: Install Requirements
+:: #ANCHOR - Install Requirements
 if not exist "%TEMP_DIR%\requirements" (
     "%VENV_DIR%\Scripts\Python.exe" -m pip install -r requirements.txt >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"
     if errorlevel 1 (
@@ -65,11 +65,12 @@ if not exist "%TEMP_DIR%\requirements" (
     echo "success" >"%TEMP_DIR%\requirements"
 )
 
-:: Launch main application
+:: #ANCHOR - Launch main application
 %PYTHON% wallhavenDownload.py %*
 if not %SCHEDULER%==1 pause
 goto :cleanup
 
+:: #ANCHOR - *function: error_handler
 :error_handler
 echo.
 echo Exit code: %errorlevel%
@@ -87,6 +88,7 @@ echo.
 echo Launch unsuccessful. Exiting.
 if not %SCHEDULER%==1 pause
 
+:: #ANCHOR - *function: cleanup
 :cleanup
 if exist "%TEMP_DIR%\stdout.txt" del "%TEMP_DIR%\stdout.txt"
 if exist "%TEMP_DIR%\stderr.txt" del "%TEMP_DIR%\stderr.txt"
