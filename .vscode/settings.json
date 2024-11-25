@@ -13,6 +13,7 @@
         "levelname",
         "levelno",
         "psutil",
+        "renderable",
         "setlocal",
         "signum",
         "toplist",

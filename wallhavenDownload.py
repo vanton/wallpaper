@@ -5,7 +5,7 @@ Version: 0.10.0
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Monday, 2024-11-25 19:48:52
+Last Modified: Tuesday, 2024-11-26 01:51:01
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -105,16 +105,16 @@ class Args:
 
 #!##############################################################################
 # 配置
-max_files = 64 * Args.MAX_PAGE
-"""max_files (int): 要保留的最大文件数量，默认为 64 * Args.MAX_PAGE。
-理论上是 Args.MAX_PAGE 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后删除。
+max_files = 64 * (Args.MAX_PAGE + 1)
+"""max_files (int): 要保留的最大文件数量，默认为 64 * (Args.MAX_PAGE + 1)。
+理论上是 Args.MAX_PAGE +1 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后删除。
 建议保存图片数应大于 单页数量 * 下载页数。"""
 wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
 pic_type_map = {
     "image/png": "png",
     "image/jpeg": "jpg",
 }
-DEBUG: bool = False
+DEBUG: bool = True
 
 # 参数解析
 # parser = argparse.ArgumentParser()
@@ -175,6 +175,7 @@ class Log:
             return f"{base_filename}.{date}.{ext}"
 
         log_level = logging.DEBUG if DEBUG else logging.INFO
+        rich_tracebacks = logging.DEBUG if DEBUG else logging.INFO
         # handler = TimedRotatingFileHandler(
         #     logPath, when=when, backupCount=backupCount, encoding="UTF-8"
         # )
