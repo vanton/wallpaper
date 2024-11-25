@@ -1,4 +1,4 @@
-﻿@ECHO OFF
+@ECHO OFF
 setlocal EnableDelayedExpansion
 
 :: #ANCHOR - Initialize variables
