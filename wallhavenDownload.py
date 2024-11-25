@@ -1,14 +1,15 @@
 """
-Filename: /wallhavenDownload.py
+File: \wallhavenDownload.py
 Project: wallpaper
-Version: v0.9.4
+Version: 0.10.0
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-11-08 16:40:36
+Last Modified: Monday, 2024-11-25 19:48:52
 Modified By: vanton
 -----
-Copyright (c) 2024
+Copyright  2021-2024
+License: MIT License
 """
 
 import aiohttp
@@ -22,10 +23,9 @@ import signal
 import time
 from typing import Iterable, Optional
 from dataclasses import dataclass
-from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Event
-from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import (
     BarColumn,
@@ -42,13 +42,42 @@ from APIKey import APIKey
 
 @dataclass
 class Args:
-    """需要时请修改此参数"""
+    """需要时请修改此参数
 
-    CATEGORIES: str = "110"  # General + Anime + People
-    MODE: str = "hot"  # Download mode (hot/latest/toplist)
-    SAVE_PATH: str = "./Pic"  # Where images are saved
-    MAX_PAGE: int = 2  # Maximum pages to download
-    RATIOS: str = "landscape"  # Image aspect ratio filter
+    See: https://wallhaven.cc/help/api#search
+    """
+
+    categories: str = "110"
+    """= `100`/`101`/`111`*/etc (general/anime/people)
+    - Turn categories on(1) or off(0)"""
+    purity: str = "100"
+    """= `100`*/`110`/`111`/etc (sfw/sketchy/nsfw)
+    - Turn purities on(1) or off(0)
+    - NSFW requires a valid API key"""
+    AI: str = "0"
+    """= `0`/`1`
+    - AI art filter"""
+    sorting: str = "hot"
+    """= `date_added`*, `relevance`, `random`, `views`, `favorites`, `toplist`
+    - Method of sorting results"""
+    order: str = "desc"
+    """= `desc`*, `asc`
+    - Sorting order"""
+    topRange: str = "1w"
+    """= `1d`, `3d`, `1w`, `1M`*, `3M`, `6M`, `1y`
+    - Sorting MUST be set to 'toplist'"""
+    ratios: str = "landscape"
+    """= 16x9,16x10,`landscape`,`portrait`,`square`
+    - List of aspect ratios
+    - Single ratio allowed"""
+    atleast: str = "1000x1000"
+    """= `1920x1080`
+    - Minimum resolution allowed"""
+
+    SAVE_PATH: str = "./Pic"
+    """Where images are saved"""
+    MAX_PAGE: int = 2
+    """Maximum pages to download"""
 
 
 """
@@ -76,14 +105,16 @@ class Args:
 
 #!##############################################################################
 # 配置
-when = "D"  # 按天轮换日志
-backup_count = 5  # 保留日志文件数量
-log_path = "./log/wallhavenDownload.log"
-wallhaven_url_base = ""
+max_files = 64 * Args.MAX_PAGE
+"""max_files (int): 要保留的最大文件数量，默认为 64 * Args.MAX_PAGE。
+理论上是 Args.MAX_PAGE 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后删除。
+建议保存图片数应大于 单页数量 * 下载页数。"""
+wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
 pic_type_map = {
     "image/png": "png",
     "image/jpeg": "jpg",
 }
+DEBUG: bool = False
 
 # 参数解析
 # parser = argparse.ArgumentParser()
@@ -96,7 +127,6 @@ pic_type_map = {
 
 #!##############################################################################
 
-console = Console()
 progress = Progress(
     TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
     SpinnerColumn(),
@@ -109,6 +139,8 @@ progress = Progress(
     "•",
     TimeRemainingColumn(),
 )
+console = progress.console
+"""`logging` 与 `progress` 输出使用同一个 `console` 实例，以防止输出冲突"""
 done_event = Event()
 
 
@@ -126,10 +158,10 @@ class Log:
 
     def __init__(
         self,
-        logPath=log_path,
-        when=when,
-        maxBytes=1024 * 1000,
-        backupCount=backup_count,
+        logPath="./log/wallhavenDownload.log",
+        when="D",  # 按天轮换日志
+        maxBytes=1024 * 64,  # 轮换日志大小
+        backupCount=5,  # 保留日志文件数量
     ):
         # 文件不存在则创建
         if not os.path.exists(os.path.dirname(logPath)):
@@ -138,22 +170,32 @@ class Log:
             with open(logPath, "w", encoding="UTF-8") as f:
                 f.write("")
 
-        # _fmt = '%(asctime)s - [%(levelname)s] - %(message)s'
-        _fmt = "%(message)s"
-
         def custom_namer(default_name) -> str:
             base_filename, ext, date = default_name.split(".")
             return f"{base_filename}.{date}.{ext}"
 
-        handler = TimedRotatingFileHandler(
-            logPath, when=when, backupCount=backupCount, encoding="UTF-8"
+        log_level = logging.DEBUG if DEBUG else logging.INFO
+        # handler = TimedRotatingFileHandler(
+        #     logPath, when=when, backupCount=backupCount, encoding="UTF-8"
+        # )
+        handler = RotatingFileHandler(
+            logPath, maxBytes=maxBytes, backupCount=backupCount, encoding="UTF-8"
+        )
+        handler.setLevel(log_level)
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
         )
         handler.namer = custom_namer
 
+        rich_handler = RichHandler(console=console)
+        rich_handler.setLevel(logging.INFO)
+        rich_handler.setFormatter(logging.Formatter("%(message)s"))
+
         logging.basicConfig(
-            level=logging.INFO,
-            format=_fmt,
-            handlers=[RichHandler(console=console), handler],
+            level=logging.NOTSET,
+            format="%(message)s",
+            datefmt="[%X]",
+            handlers=[rich_handler, handler],
         )
         self.logger = logging.getLogger(__name__)
 
@@ -170,9 +212,9 @@ def init_download():
     # atleast=1000x1000 最小尺寸 1000x1000
     # topRange=1w 一周
 
-    wallhaven_url_base = (
-        f"https://wallhaven.cc/api/v1/search?apikey={APIKey}&categories={Args.CATEGORIES}"
-        f"&sorting={Args.MODE}&ratios={Args.RATIOS}&purity=100&atleast=1000x1000&topRange=1w&page="
+    wallhaven_url_base += (
+        f"apikey={APIKey}&categories={Args.categories}&order=desc&topRange={Args.topRange}&atleast={Args.atleast}"
+        f"&sorting={Args.sorting}&ratios={Args.ratios}&purity={Args.purity}&ai_art_filter={Args.AI}&page="
     )
     log.info(wallhaven_url_base.split("&", 1)[1])
     # log.info(wallhaven_url_base)
@@ -181,7 +223,7 @@ def init_download():
 
 
 def format_time(atime: Optional[float] = None) -> str:
-    """
+    """格式化时间
     Args:
         atime: 时间戳秒数，或为 None 以格式化当前时间。
 
@@ -192,9 +234,7 @@ def format_time(atime: Optional[float] = None) -> str:
 
 
 def file_size(size_in_bytes: int) -> str:
-    """
-    计算文件大小并返回以MB为单位的字符串表示。
-
+    """计算文件大小并返回以MB为单位的字符串表示。
     Args:
         size_in_bytes: 文件大小（字节）
 
@@ -206,9 +246,7 @@ def file_size(size_in_bytes: int) -> str:
 
 
 def dir_size(path: str | os.PathLike) -> str | int:
-    """
-    计算指定目录的大小。
-
+    """计算指定目录的大小。
     Args:
         path: 要计算大小的目录路径。
 
@@ -232,9 +270,7 @@ def dir_size(path: str | os.PathLike) -> str | int:
 
 
 def dir_info(path: str | os.PathLike):
-    """
-    记录目录的信息。
-
+    """记录目录的信息。
     Args:
         path: 要记录信息的目录路径。
     """
@@ -248,9 +284,7 @@ def dir_info(path: str | os.PathLike):
 
 
 def remove_file(file: str | os.PathLike):
-    """
-    移除文件。
-
+    """移除文件。
     Args:
         file: 要移除的文件路径。
     """
@@ -264,13 +298,11 @@ def remove_file(file: str | os.PathLike):
         log.error(f"文件不存在: {file}")
 
 
-def clean_up(path=Args.SAVE_PATH, max_files=96):
-    """
-    清理目录中的文件，移除旧文件。
-
+def clean_up(path=Args.SAVE_PATH, max_files=max_files):
+    """清理目录中的文件，移除旧文件。
     Args:
         path: 要清理的目录路径，默认为 args.savePath。
-        max_files: 要保留的最大文件数量，默认为 96。
+        max_files: 要保留的最大文件数量，默认为 64 * 2。
     """
     log.info("清理文件")
     if os.path.exists(path):
@@ -291,25 +323,6 @@ def clean_up(path=Args.SAVE_PATH, max_files=96):
         log.error(f"文件不存在: {path}")
 
 
-def handle_server_response(response_bytes) -> Optional[dict]:
-    """
-    处理来自服务器的响应。
-
-    Args:
-        response_bytes: 服务器返回的字节数据。
-
-    Returns:
-        如果解码和解析成功则返回解析后的 JSON 对象，否则返回 None。
-    """
-    try:
-        response_str = response_bytes.decode("utf-8")
-        response_dict = json.loads(response_str)
-        return response_dict
-    except json.JSONDecodeError as e:
-        log.critical(f"结果转化错误: {e}")
-        return None
-
-
 @dataclass
 class DownloadTask:
     """Represents a download task with its metadata"""
@@ -327,9 +340,7 @@ class DownloadTask:
 
 
 async def copy_url_async(task: DownloadTask) -> Optional[str]:
-    """
-    Asynchronously copy data from a URL to a local file.
-
+    """Asynchronously copy data from a URL to a local file.
     Args:
         task: DownloadTask containing download parameters
 
@@ -378,7 +389,7 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> Optional[s
             log.warning(f"Retry {attempt + 1}/{max_retries} for {task.url}")
             progress.reset(task.task_id, start=True)
         result = await copy_url_async(task)
-        if result:
+        if result != None:
             return result
     return None
 
@@ -386,9 +397,7 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> Optional[s
 async def download_async(
     urls: Iterable[str], dest_dir=Args.SAVE_PATH, max_concurrent=4
 ):
-    """
-    Download multiple files concurrently to the given directory.
-
+    """Download multiple files concurrently to the given directory.
     Args:
         urls: Iterable of URLs to download
         dest_dir: Destination directory
@@ -422,9 +431,7 @@ async def download_async(
 
 
 def download(urls: Iterable[str], dest_dir=Args.SAVE_PATH):
-    """
-    Entry point for downloads - runs async code in event loop
-    """
+    """Entry point for downloads - runs async code in event loop"""
     try:
         asyncio.run(download_async(urls, dest_dir))
     except KeyboardInterrupt:
@@ -444,9 +451,7 @@ class TargetPic:
 
 
 def download_one_pic(target_pic: TargetPic) -> Optional[str]:
-    """
-    下载指定 URL 的单张图片到指定路径。
-
+    """下载指定 URL 的单张图片到指定路径。
     Args:
         target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
     """
@@ -456,7 +461,7 @@ def download_one_pic(target_pic: TargetPic) -> Optional[str]:
     filename = url.split("/")[-1]
     filesize = target_pic.file_size
     pic_path = f"{Args.SAVE_PATH}/{filename}"
-    log.debug(f"<{pic_id}> <{resolution}> {url}")
+    # log.debug(f"<{pic_id}> <{resolution}> {url}")
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.debug(
@@ -474,15 +479,30 @@ def download_one_pic(target_pic: TargetPic) -> Optional[str]:
     return url
 
 
-def get_pending_pic_url(wallhaven_url: str) -> list:
-    """
-    从 Wallhaven API 检索待处理的图片 URL 列表。
+def handle_server_response(response_bytes) -> Optional[dict]:
+    """处理来自服务器的响应。
+    Args:
+        response_bytes: 服务器返回的字节数据。
 
+    Returns:
+        如果解码和解析成功则返回解析后的 JSON 对象，否则返回 None。
+    """
+    try:
+        response_str = response_bytes.decode("utf-8")
+        response_dict = json.loads(response_str)
+        return response_dict
+    except json.JSONDecodeError as e:
+        log.critical(f"结果转化错误: {e}")
+        return None
+
+
+def get_pending_pic_url(wallhaven_url: str) -> list:
+    """从 Wallhaven API 检索待处理的图片 URL 列表。
     Args:
         wallhaven_url: 查询图片数据的 URL。
 
     Returns:
-        list: 包含图片元数据（ID、分辨率、URL 和文件类型）的字典列表。
+        list: 包含图片元数据(ID、分辨率、URL 和文件类型)的字典列表。
     """
     # response_res = requests.get(wallhaven_url, proxies=proxies).content
     response_res = requests.get(wallhaven_url).content
@@ -516,7 +536,7 @@ def download_all_pics():
                 num += 1
         log.info(f"下载第{page_num}页图片: {num}/{len(pending_pic_url_list)}")
     download(urls)
-    # log.debug(f"{page_num}页图片下载完成")
+    log.info(f"{page_num}页图片下载完成")
 
 
 def wallhaven_download():
