@@ -4,5 +4,4 @@ Pic/*.*
 log/*.*
 tmp/**
 APIKey.py
-*.lock
 !.keep
