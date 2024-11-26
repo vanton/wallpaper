@@ -5,7 +5,7 @@ Version: 0.10.2
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-11-26 11:46:43
+Last Modified: Tuesday, 2024-11-26 17:39:31
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -21,7 +21,8 @@ import os
 import requests
 import signal
 import time
-from typing import Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -36,6 +37,7 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
     TransferSpeedColumn,
+    TaskID,
 )
 from rich.table import Column
 
@@ -47,39 +49,32 @@ class Args:
     """需要时请修改此参数
 
     See: https://wallhaven.cc/help/api#search
+
+    Args:
+        categories (str): = `100`/`101`/`111`*/etc (general/anime/people) - Turn categories on(1) or off(0)
+        purity (str): = `100`*/`110`/`111`/etc (sfw/sketchy/nsfw) - Turn purities on(1) or off(0) - NSFW requires a valid API key
+        AI (str): = `0`/`1` - AI art filter
+        sorting (str): = "hot" `date_added`*, `relevance`, `random`, `views`, `favorites`, `toplist`- Method of sorting results
+        order (str): = `desc`*, `asc` - Sorting order
+        topRange (str): = `1d`, `3d`, `1w`, `1M`*, `3M`, `6M`, `1y` - Sorting MUST be set to 'toplist'
+        ratios (str): = 16x9,16x10,`landscape`,`portrait`,`square` - List of aspect ratios - Single ratio allowed
+        atleast (str): = `1920x1080` - Minimum resolution allowed
+
+        SAVE_PATH (str): Where images are saved
+        MAX_PAGE (int): Maximum pages to download
     """
 
     categories: str = "110"
-    """= `100`/`101`/`111`*/etc (general/anime/people)
-    - Turn categories on(1) or off(0)"""
     purity: str = "100"
-    """= `100`*/`110`/`111`/etc (sfw/sketchy/nsfw)
-    - Turn purities on(1) or off(0)
-    - NSFW requires a valid API key"""
     AI: str = "0"
-    """= `0`/`1`
-    - AI art filter"""
     sorting: str = "hot"
-    """= `date_added`*, `relevance`, `random`, `views`, `favorites`, `toplist`
-    - Method of sorting results"""
     order: str = "desc"
-    """= `desc`*, `asc`
-    - Sorting order"""
     topRange: str = "1w"
-    """= `1d`, `3d`, `1w`, `1M`*, `3M`, `6M`, `1y`
-    - Sorting MUST be set to 'toplist'"""
     ratios: str = "landscape"
-    """= 16x9,16x10,`landscape`,`portrait`,`square`
-    - List of aspect ratios
-    - Single ratio allowed"""
     atleast: str = "1000x1000"
-    """= `1920x1080`
-    - Minimum resolution allowed"""
 
     SAVE_PATH: str = "./Pic"
-    """Where images are saved"""
     MAX_PAGE: int = 2
-    """Maximum pages to download"""
 
 
 """
@@ -109,8 +104,8 @@ class Args:
 # 配置
 max_files = 64 * (Args.MAX_PAGE + 1)
 """max_files (int): 要保留的最大文件数量，默认为 64 * (Args.MAX_PAGE + 1)。
-理论上是 Args.MAX_PAGE +1 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后删除。
-建议保存图片数应大于 单页数量 * 下载页数。"""
+- 理论上是 Args.MAX_PAGE +1 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后删除。
+- 建议保存图片数应大于 单页数量 * 下载页数。"""
 wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
 pic_type_map = {
     "image/png": "png",
@@ -135,14 +130,14 @@ class MyProgress(Progress):
         title = "Progress"
         if hasattr(self, "title"):
             title = self.title
-        yield Panel(self.make_tasks_table(self.tasks), title=title)
+        yield Panel(renderable=self.make_tasks_table(tasks=self.tasks), title=title)
 
     def set_title(self, title):
         self.title = title
 
 
 progress = MyProgress(
-    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+    TextColumn(text_format="[bold blue]{task.fields[filename]}", justify="right"),
     # SpinnerColumn(),
     BarColumn(),
     "[progress.percentage]{task.percentage:>3.1f}%",
@@ -152,7 +147,7 @@ progress = MyProgress(
     TransferSpeedColumn(table_column=Column(justify="right")),
     "•",
     TimeRemainingColumn(),
-    TextColumn("[gray]{task.description}"),
+    TextColumn(text_format="[gray]{task.description}"),
 )
 console = progress.console
 window_width, window_height = console.size
@@ -170,7 +165,13 @@ signal.signal(signal.SIGINT, handle_sigint)
 
 
 class Log:
-    # when 轮换时间 S: 秒 M: 分 H: 小时 D: 天 W: 周
+    """日志类
+
+    see the :mod:`logging` module
+
+    Attributes:
+        self.logger: same as :class:`logging.Logger`
+    """
 
     def __init__(
         self,
@@ -186,6 +187,7 @@ class Log:
             with open(logPath, "w", encoding="UTF-8") as f:
                 f.write("")
 
+        # 重命名备份日志文件
         def custom_namer(default_name: str) -> str:
             base_filename, ext, date = default_name.split(".")
             return f"{base_filename}.{date}.{ext}"
@@ -239,7 +241,7 @@ def init_download():
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
-def format_time(atime: Optional[float] = None) -> str:
+def format_time(atime=None) -> str:
     """格式化时间
     Args:
         atime: 时间戳秒数，或为 None 以格式化当前时间。
@@ -344,12 +346,12 @@ def clean_up(path=Args.SAVE_PATH, max_files=max_files):
 class DownloadTask:
     """Represents a download task with its metadata"""
 
-    task_id: str
+    task_id: TaskID
     url: str
     path: Path
     chunk_size: int = 32 * 1024  # 32KB chunks
     timeout: int = 60
-    headers: dict = None
+    headers: dict[str, str] | None = None
 
     def __post_init__(self):
         self.headers = self.headers or {"User-Agent": "Magic Browser"}
@@ -361,7 +363,7 @@ count = 0
 all = 0
 
 
-async def copy_url_async(task: DownloadTask) -> None | str:
+async def copy_url_async(task: DownloadTask) -> None | TaskID:
     """Asynchronously copy data from a URL to a local file.
     Args:
         task: DownloadTask containing download parameters
@@ -378,7 +380,7 @@ async def copy_url_async(task: DownloadTask) -> None | str:
                     log.error(f"HTTP {response.status} for {task.url}")
                     return None
                 total_size = int(response.headers.get("Content-Length", 0))
-                progress.update(task.task_id, total=total_size)
+                progress.update(task_id=task.task_id, total=total_size)
                 async with aiofiles.open(task.path, "wb") as dest_file:
                     progress.start_task(task.task_id)
                     progress.update(task.task_id, visible=True)
@@ -411,7 +413,7 @@ async def copy_url_async(task: DownloadTask) -> None | str:
     return None
 
 
-def set_done(task_id: str):
+def set_done(task_id: TaskID):
     """Mark a task as done and update the progress bar."""
     global done_list, count, all
     if task_id not in done_list:
@@ -423,22 +425,22 @@ def set_done(task_id: str):
     progress.set_title(f"Progress: {count}/{all}")
 
 
-async def download_with_retries(task: DownloadTask, max_retries=3) -> str | None:
+async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | None:
     """Attempt to download with retries on failure"""
     for attempt in range(max_retries):
         if attempt > 0:
             await asyncio.sleep(2**attempt)  # Exponential backoff
             log.warning(f"retry {attempt + 1}/{max_retries} for {task.url}")
-            progress.reset(task.task_id, start=True)
+            progress.reset(task_id=task.task_id, start=True)
             progress.update(
                 task.task_id,
                 description=f" {attempt + 1}/{max_retries}",
             )
         result = await copy_url_async(task)
         if result != None:
-            set_done(task.task_id)
+            set_done(task_id=task.task_id)
             return result
-    set_done(task.task_id)
+    set_done(task_id=task.task_id)
     return None
 
 
@@ -456,16 +458,16 @@ async def download_async(
     semaphore = asyncio.Semaphore(max_concurrent)
     tasks = []
 
-    async def bounded_download(task: DownloadTask) -> str | None:
+    async def bounded_download(task: DownloadTask) -> TaskID | None:
         async with semaphore:
-            return await download_with_retries(task)
+            return await download_with_retries(task=task)
 
     with progress:
         for url, again in urls:
             filename = url.split("/")[-1]
             description = "" if again else ""
-            task_id = progress.add_task(
-                description, filename=filename, start=False, visible=False
+            task_id: TaskID = progress.add_task(
+                description=description, filename=filename, start=False, visible=False
             )
             download_task = DownloadTask(
                 task_id=task_id, url=url, path=dest_path / filename
@@ -530,7 +532,7 @@ def download_one_pic(target_pic: TargetPic) -> None | tuple[str, bool]:
     return url, again
 
 
-def handle_server_response(response_bytes) -> dict | None:
+def handle_server_response(response_bytes) -> Any:
     """处理来自服务器的响应。
     Args:
         response_bytes: 服务器返回的字节数据。
@@ -544,7 +546,6 @@ def handle_server_response(response_bytes) -> dict | None:
         return response_dict
     except json.JSONDecodeError as e:
         log.critical(f"结果转化错误: {e}")
-        return None
 
 
 def get_pending_pic_url(wallhaven_url: str) -> list:
@@ -556,8 +557,8 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
         list: 包含图片元数据(ID、分辨率、URL 和文件类型)的字典列表。
     """
     # response_res = requests.get(wallhaven_url, proxies=proxies).content
-    response_res = requests.get(wallhaven_url).content
-    response_res_dict = handle_server_response(response_res)
+    response_res = requests.get(url=wallhaven_url).content
+    response_res_dict = handle_server_response(response_bytes=response_res)
     pending_pic_url_list = []
     if not response_res_dict.get("data"):
         log.critical("获取图片列表失败")
@@ -589,7 +590,7 @@ def download_all_pics():
         log.info(f"下载第{page_num}页图片: {num}/{len(pending_pic_url_list)}")
     all = len(urls)
     download(urls)
-    log.info(f"{page_num}页图片下载完成")
+    log.info("图片下载完成")
 
 
 def wallhaven_download():
