@@ -1,11 +1,11 @@
 """
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.10.0
+Version: 0.10.2
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-11-26 01:51:01
+Last Modified: Tuesday, 2024-11-26 11:46:43
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -27,6 +27,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Event
 from rich.logging import RichHandler
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     DownloadColumn,
@@ -36,6 +37,7 @@ from rich.progress import (
     TimeRemainingColumn,
     TransferSpeedColumn,
 )
+from rich.table import Column
 
 from APIKey import APIKey
 
@@ -127,19 +129,33 @@ DEBUG: bool = True
 
 #!##############################################################################
 
-progress = Progress(
+
+class MyProgress(Progress):
+    def get_renderables(self):
+        title = "Progress"
+        if hasattr(self, "title"):
+            title = self.title
+        yield Panel(self.make_tasks_table(self.tasks), title=title)
+
+    def set_title(self, title):
+        self.title = title
+
+
+progress = MyProgress(
     TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-    SpinnerColumn(),
+    # SpinnerColumn(),
     BarColumn(),
     "[progress.percentage]{task.percentage:>3.1f}%",
     "•",
-    DownloadColumn(),
+    DownloadColumn(table_column=Column(justify="center")),
     "•",
-    TransferSpeedColumn(),
+    TransferSpeedColumn(table_column=Column(justify="right")),
     "•",
     TimeRemainingColumn(),
+    TextColumn("[gray]{task.description}"),
 )
 console = progress.console
+window_width, window_height = console.size
 """`logging` 与 `progress` 输出使用同一个 `console` 实例，以防止输出冲突"""
 done_event = Event()
 
@@ -170,7 +186,7 @@ class Log:
             with open(logPath, "w", encoding="UTF-8") as f:
                 f.write("")
 
-        def custom_namer(default_name) -> str:
+        def custom_namer(default_name: str) -> str:
             base_filename, ext, date = default_name.split(".")
             return f"{base_filename}.{date}.{ext}"
 
@@ -340,7 +356,12 @@ class DownloadTask:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
 
-async def copy_url_async(task: DownloadTask) -> Optional[str]:
+done_list = []
+count = 0
+all = 0
+
+
+async def copy_url_async(task: DownloadTask) -> None | str:
     """Asynchronously copy data from a URL to a local file.
     Args:
         task: DownloadTask containing download parameters
@@ -369,9 +390,17 @@ async def copy_url_async(task: DownloadTask) -> Optional[str]:
                         downloaded += len(chunk)
                         progress.update(task.task_id, advance=len(chunk))
                     if downloaded == total_size:
+                        progress.update(
+                            task.task_id,
+                            description="[green]",
+                        )
                         return task.task_id
                     else:
                         log.warning(f"Incomplete download for {task.url}")
+                        progress.update(
+                            task.task_id,
+                            description="[red]",
+                        )
                         return None
     except asyncio.TimeoutError:
         log.error(f"Timeout downloading {task.url}")
@@ -382,21 +411,39 @@ async def copy_url_async(task: DownloadTask) -> Optional[str]:
     return None
 
 
-async def download_with_retries(task: DownloadTask, max_retries=3) -> Optional[str]:
+def set_done(task_id: str):
+    """Mark a task as done and update the progress bar."""
+    global done_list, count, all
+    if task_id not in done_list:
+        done_list.append(task_id)
+        count += 1
+    if len(done_list) > window_height - 15:
+        progress.remove_task(done_list[0])
+        done_list.pop(0)
+    progress.set_title(f"Progress: {count}/{all}")
+
+
+async def download_with_retries(task: DownloadTask, max_retries=3) -> str | None:
     """Attempt to download with retries on failure"""
     for attempt in range(max_retries):
         if attempt > 0:
             await asyncio.sleep(2**attempt)  # Exponential backoff
-            log.warning(f"Retry {attempt + 1}/{max_retries} for {task.url}")
+            log.warning(f"retry {attempt + 1}/{max_retries} for {task.url}")
             progress.reset(task.task_id, start=True)
+            progress.update(
+                task.task_id,
+                description=f" {attempt + 1}/{max_retries}",
+            )
         result = await copy_url_async(task)
         if result != None:
+            set_done(task.task_id)
             return result
+    set_done(task.task_id)
     return None
 
 
 async def download_async(
-    urls: Iterable[str], dest_dir=Args.SAVE_PATH, max_concurrent=4
+    urls: list[tuple[str, bool]], dest_dir=Args.SAVE_PATH, max_concurrent=4
 ):
     """Download multiple files concurrently to the given directory.
     Args:
@@ -409,15 +456,16 @@ async def download_async(
     semaphore = asyncio.Semaphore(max_concurrent)
     tasks = []
 
-    async def bounded_download(task: DownloadTask) -> Optional[str]:
+    async def bounded_download(task: DownloadTask) -> str | None:
         async with semaphore:
             return await download_with_retries(task)
 
     with progress:
-        for url in urls:
+        for url, again in urls:
             filename = url.split("/")[-1]
+            description = "" if again else ""
             task_id = progress.add_task(
-                "download", filename=filename, start=False, visible=False
+                description, filename=filename, start=False, visible=False
             )
             download_task = DownloadTask(
                 task_id=task_id, url=url, path=dest_path / filename
@@ -431,7 +479,7 @@ async def download_async(
                 log.error(f"Failed to download {url}: {result}")
 
 
-def download(urls: Iterable[str], dest_dir=Args.SAVE_PATH):
+def download(urls: list[tuple[str, bool]], dest_dir=Args.SAVE_PATH):
     """Entry point for downloads - runs async code in event loop"""
     try:
         asyncio.run(download_async(urls, dest_dir))
@@ -451,7 +499,7 @@ class TargetPic:
     file_size: int
 
 
-def download_one_pic(target_pic: TargetPic) -> Optional[str]:
+def download_one_pic(target_pic: TargetPic) -> None | tuple[str, bool]:
     """下载指定 URL 的单张图片到指定路径。
     Args:
         target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
@@ -463,6 +511,7 @@ def download_one_pic(target_pic: TargetPic) -> Optional[str]:
     filesize = target_pic.file_size
     pic_path = f"{Args.SAVE_PATH}/{filename}"
     # log.debug(f"<{pic_id}> <{resolution}> {url}")
+    again = False
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.debug(
@@ -471,16 +520,17 @@ def download_one_pic(target_pic: TargetPic) -> Optional[str]:
         if file_info.st_size == filesize:
             return
         else:
-            log.warning(
+            log.debug(
                 f"图片不完整，重新下载 <{filename}> <{file_info.st_size} -> {filesize}>"
             )
+            again = True
         # if is_valid_image(pic_path):
         #     return
     # wget(url, pic_path)
-    return url
+    return url, again
 
 
-def handle_server_response(response_bytes) -> Optional[dict]:
+def handle_server_response(response_bytes) -> dict | None:
     """处理来自服务器的响应。
     Args:
         response_bytes: 服务器返回的字节数据。
@@ -525,17 +575,19 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
 
 def download_all_pics():
     """从 Wallhaven 下载指定页面范围的所有图像。"""
+    global all
     urls = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
         wallhaven_url = wallhaven_url_base + str(page_num)
         pending_pic_url_list: list[TargetPic] = get_pending_pic_url(wallhaven_url)
         num = 0
         for target_pic in pending_pic_url_list:
-            url = download_one_pic(target_pic)
+            url: None | tuple[str, bool] = download_one_pic(target_pic)
             if url:
                 urls.append(url)
                 num += 1
         log.info(f"下载第{page_num}页图片: {num}/{len(pending_pic_url_list)}")
+    all = len(urls)
     download(urls)
     log.info(f"{page_num}页图片下载完成")
 
