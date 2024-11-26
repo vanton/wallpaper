@@ -1,3 +1,17 @@
+:: ================
+:: File: \start.bat
+:: Project: wallpaper
+:: Version: 0.10.2
+:: File Created: Saturday, 2024-11-23 13:54:47
+:: Author: vanton
+:: -----
+:: Last Modified: Tuesday, 2024-11-26 11:57:47
+:: Modified By: vanton
+:: -----
+:: Copyright  2024
+:: License: MIT License
+:: ================
+
 @ECHO OFF
 setlocal EnableDelayedExpansion
 
@@ -18,6 +32,8 @@ if errorlevel 1 (
     echo Error: Python is not available
     goto :error_handler
 )
+
+
 
 :: #ANCHOR - Check/Install pip
 %PYTHON% -mpip --help >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"

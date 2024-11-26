@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wallpaper"
-version = "0.10.0"
+version = "0.10.2"
 description = ""
 authors = ["vanton"]
 readme = "README.md"
