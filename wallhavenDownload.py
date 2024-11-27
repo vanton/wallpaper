@@ -5,7 +5,7 @@ Version: 0.10.2
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-11-26 17:39:31
+Last Modified: Wednesday, 2024-11-27 15:22:57
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -44,7 +44,7 @@ from rich.table import Column
 from APIKey import APIKey
 
 
-@dataclass
+@dataclass(frozen=True)
 class Args:
     """需要时请修改此参数
 
@@ -53,7 +53,7 @@ class Args:
     Args:
         categories (str): = `100`/`101`/`111`*/etc (general/anime/people) - Turn categories on(1) or off(0)
         purity (str): = `100`*/`110`/`111`/etc (sfw/sketchy/nsfw) - Turn purities on(1) or off(0) - NSFW requires a valid API key
-        AI (str): = `0`/`1` - AI art filter
+        ai_art_filter (str): = `0`/`1` - AI art filter - off(0) allow AI
         sorting (str): = "hot" `date_added`*, `relevance`, `random`, `views`, `favorites`, `toplist`- Method of sorting results
         order (str): = `desc`*, `asc` - Sorting order
         topRange (str): = `1d`, `3d`, `1w`, `1M`*, `3M`, `6M`, `1y` - Sorting MUST be set to 'toplist'
@@ -66,7 +66,7 @@ class Args:
 
     categories: str = "110"
     purity: str = "100"
-    AI: str = "0"
+    ai_art_filter: str = "0"
     sorting: str = "hot"
     order: str = "desc"
     topRange: str = "1w"
@@ -74,7 +74,7 @@ class Args:
     atleast: str = "1000x1000"
 
     SAVE_PATH: str = "./Pic"
-    MAX_PAGE: int = 2
+    MAX_PAGE: int = 4
 
 
 """
@@ -233,7 +233,7 @@ def init_download():
 
     wallhaven_url_base += (
         f"apikey={APIKey}&categories={Args.categories}&order=desc&topRange={Args.topRange}&atleast={Args.atleast}"
-        f"&sorting={Args.sorting}&ratios={Args.ratios}&purity={Args.purity}&ai_art_filter={Args.AI}&page="
+        f"&sorting={Args.sorting}&ratios={Args.ratios}&purity={Args.purity}&ai_art_filter={Args.ai_art_filter}&page="
     )
     log.info(wallhaven_url_base.split("&", 1)[1])
     # log.info(wallhaven_url_base)
