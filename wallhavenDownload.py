@@ -1,11 +1,11 @@
 """
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.10.2
+Version: 0.10.3
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Wednesday, 2024-11-27 15:22:57
+Last Modified: Thursday, 2024-11-28 15:10:23
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -21,6 +21,7 @@ import os
 import requests
 import signal
 import time
+from collections import deque
 from collections.abc import Iterable
 from typing import Any
 from dataclasses import dataclass
@@ -241,7 +242,7 @@ def init_download():
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
-def format_time(atime=None) -> str:
+def format_time(atime: float | None = None) -> str:
     """格式化时间
     Args:
         atime: 时间戳秒数，或为 None 以格式化当前时间。
@@ -349,7 +350,7 @@ class DownloadTask:
     task_id: TaskID
     url: str
     path: Path
-    chunk_size: int = 32 * 1024  # 32KB chunks
+    chunk_size: int = 64 * 1024  # 64KB chunks
     timeout: int = 60
     headers: dict[str, str] | None = None
 
@@ -358,7 +359,7 @@ class DownloadTask:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
 
-done_list = []
+done_list: deque[TaskID] = deque()
 count = 0
 all = 0
 
@@ -419,9 +420,10 @@ def set_done(task_id: TaskID):
     if task_id not in done_list:
         done_list.append(task_id)
         count += 1
-    if len(done_list) > window_height - 15:
-        progress.remove_task(done_list[0])
-        done_list.pop(0)
+    _length = len(done_list)
+    if (_length > window_height - 15 and _length > 10) or _length > 20:
+        progress.remove_task(done_list.popleft())
+
     progress.set_title(f"Progress: {count}/{all}")
 
 
@@ -506,8 +508,6 @@ def download_one_pic(target_pic: TargetPic) -> None | tuple[str, bool]:
     Args:
         target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
     """
-    pic_id = target_pic.id
-    resolution = target_pic.resolution
     url = target_pic.url
     filename = url.split("/")[-1]
     filesize = target_pic.file_size
