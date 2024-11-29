@@ -1,18 +1,3 @@
-"""
-File: \gen_colors.py
-Project: wallpaper
-Version: 0.10.3
-File Created: Thursday, 2024-11-28 20:42:20
-Author: vanton
------
-Last Modified: Thursday, 2024-11-28 23:55:15
-Modified By: vanton
------
-Copyright  2024
-License: MIT License
-"""
-
-
 def print_color(text, r, g, b, desc=""):
     """Prints colored text using RGB values."""
     print(f"\033[38;2;{r};{g};{b}m{text}\033[0m {desc}")

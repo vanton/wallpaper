@@ -1,22 +1,8 @@
-"""
-File: \enlighten_test.py
-Project: wallpaper
-Version: 0.10.3
-File Created: Tuesday, 2024-11-26 07:22:42
-Author: vanton
------
-Last Modified: Thursday, 2024-11-28 23:55:31
-Modified By: vanton
------
-Copyright  2024
-License: MIT License
-"""
-
 import asyncio
 import random
 import enlighten
 
-from gen_colors import generate_colors
+from Enlighten.gen_colors import generate_colors
 
 manager = enlighten.get_manager()
 chunk_size = 64 * 1024  # 64 KiB
@@ -34,7 +20,7 @@ color_index = 0
 def get_task(color=None):
     global color_index
     size = random.uniform(1.0, 10.0) * 2**20  # 1-10 MiB (float)
-    colors = generate_colors(20)
+    colors = generate_colors(12)
     color = color or colors[color_index % len(colors)]
     color_index += 1
     return (
