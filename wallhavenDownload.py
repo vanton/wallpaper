@@ -1,47 +1,47 @@
-"""
+r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.10.4
+Version: 0.10.5
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Friday, 2024-11-29 11:04:45
+Last Modified: Friday, 2024-11-29 16:27:54
 Modified By: vanton
 -----
 Copyright  2021-2024
 License: MIT License
 """
 
-import aiohttp
-import aiofiles
 import asyncio
 import json
 import logging
 import os
-import requests
 import signal
 import time
 from collections import deque
-from functools import lru_cache
-from typing import Any
 from dataclasses import dataclass
+from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Event
+from turtle import color
+from typing import Any
+
+import aiofiles
+import aiohttp
+import requests
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     DownloadColumn,
     Progress,
-    SpinnerColumn,
+    TaskID,
     TextColumn,
     TimeRemainingColumn,
     TransferSpeedColumn,
-    TaskID,
 )
 from rich.table import Column
-
 
 from APIKey import APIKey
 
@@ -52,7 +52,7 @@ class Args:
 
     See: https://wallhaven.cc/help/api#search
 
-    Args:
+    Attributes:
         categories (str): = `100`/`101`/`111`*/etc (general/anime/people) - Turn categories on(1) or off(0)
         purity (str): = `100`*/`110`/`111`/etc (sfw/sketchy/nsfw) - Turn purities on(1) or off(0) - NSFW requires a valid API key
         ai_art_filter (str): = `0`/`1` - AI art filter - off(0) allow AI
@@ -104,8 +104,8 @@ class Args:
 
 #!##############################################################################
 # 配置
-max_files = 128
-"""max_files (int): 要保留的最大文件数量，默认为 64 * 2。
+max_files = 24 * Args.MAX_PAGE + 4
+"""max_files (int): 要保留的最大文件数量，默认为 24 * Args.MAX_PAGE + 4。
 - 理论上是 Args.MAX_PAGE 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后重复删除。
 - 建议保存图片数应大于 单页数量 * 下载页数。"""
 wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
@@ -127,7 +127,7 @@ DEBUG: bool = True
 #!##############################################################################
 
 
-class MyProgress(Progress):
+class AdvProgress(Progress):
     def get_renderables(self):
         title = "Progress"
         if hasattr(self, "title"):
@@ -138,9 +138,9 @@ class MyProgress(Progress):
         self.title = title
 
 
-progress = MyProgress(
+progress = AdvProgress(
     TextColumn(text_format="[bold blue]{task.fields[filename]}", justify="right"),
-    # SpinnerColumn(),
+    "{task.fields[colors]}",
     BarColumn(),
     "[progress.percentage]{task.percentage:>3.1f}%",
     "•",
@@ -150,10 +150,11 @@ progress = MyProgress(
     "•",
     TimeRemainingColumn(),
     TextColumn(text_format="[gray]{task.description}"),
+    auto_refresh=False,
 )
 console = progress.console
-window_width, window_height = console.size
 """`logging` 与 `progress` 输出使用同一个 `console` 实例，以防止输出冲突"""
+window_width, window_height = console.size
 done_event = Event()
 
 
@@ -195,7 +196,6 @@ class Log:
             return f"{base_filename}.{date}.{ext}"
 
         log_level = logging.DEBUG if DEBUG else logging.INFO
-        rich_tracebacks = logging.DEBUG if DEBUG else logging.INFO
         # handler = TimedRotatingFileHandler(
         #     logPath, when=when, backupCount=backupCount, encoding="UTF-8"
         # )
@@ -426,7 +426,7 @@ class DownloadTask:
     url: str
     path: Path
     chunk_size: int = 64 * 1024  # 64KB chunks
-    timeout: int = 60
+    timeout: int = 20
     headers: dict[str, str] | None = None
 
     def __post_init__(self):
@@ -466,27 +466,26 @@ async def copy_url_async(task: DownloadTask) -> None | TaskID:
                             return task.task_id
                         await dest_file.write(chunk)
                         downloaded += len(chunk)
-                        progress.update(task.task_id, advance=len(chunk))
+                        progress.update(task.task_id, advance=len(chunk), refresh=True)
                     if downloaded == total_size:
                         progress.update(
-                            task.task_id,
-                            description="[green]",
+                            task.task_id, description="[green]", refresh=True
                         )
                         return task.task_id
                     else:
                         log.warning(f"Incomplete download for {task.url}")
                         progress.update(
-                            task.task_id,
-                            description="[red]",
+                            task.task_id, description="[red]", refresh=True
                         )
-                        return None
+    except KeyboardInterrupt:
+        log.info("Download interrupted by user")
+        done_event.set()
     except asyncio.TimeoutError:
         log.error(f"Timeout downloading {task.url}")
     except aiohttp.ClientError as e:
         log.error(f"Network error for {task.url}: {e}")
     except Exception as e:
         log.error(f"Unexpected error downloading {task.url}: {e}")
-    return None
 
 
 def set_done(task_id: TaskID):
@@ -496,8 +495,8 @@ def set_done(task_id: TaskID):
         done_list.append(task_id)
         count += 1
     _length = len(done_list)
-    if (_length > window_height - 15 and _length > 10) or _length > 20:
-        progress.remove_task(done_list.popleft())
+    if (_length > window_height - 15 and _length > 10) or _length > 24:
+        progress.remove_task(done_list.popleft())  # cspell:words popleft
 
     progress.set_title(f"Progress: {count}/{all}")
 
@@ -517,12 +516,22 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | N
         if result != None:
             set_done(task_id=task.task_id)
             return result
+    progress.update(task.task_id, description="[red]", refresh=True)
     set_done(task_id=task.task_id)
-    return None
+
+
+@dataclass
+class TargetPic:
+    id: str  # "7p86x9"
+    file_size: int  # 2305231
+    path: str  # "https://w.wallhaven.cc/full/7p/wallhaven-7p86x9.jpg"
+    resolution: str  # "1600x1074"
+    purity: str  # "sfw"
+    colors: list[str]  # ["#424153","#ff9900","#000000","#ff6600","#999999"]
 
 
 async def download_async(
-    urls: list[tuple[str, bool]], dest_dir=Args.SAVE_PATH, max_concurrent=4
+    pics: list[tuple[TargetPic, bool]], dest_dir=Args.SAVE_PATH, max_concurrent=4
 ):
     """Download multiple files concurrently to the given directory.
     Args:
@@ -540,28 +549,34 @@ async def download_async(
             return await download_with_retries(task=task)
 
     with progress:
-        for url, again in urls:
-            filename = url.split("/")[-1]
+        for pic, again in pics:
+            filename = pic.path.split("/")[-1]
+            # colors = "[#990033]█[#339966]█[#993366]█[#FF9933]█[#6666FF]█"
+            colors = "".join([f"[{color}]██" for color in pic.colors])
             description = "" if again else ""
             task_id: TaskID = progress.add_task(
-                description=description, filename=filename, start=False, visible=False
+                description=description,
+                filename=filename,
+                colors=colors,
+                start=False,
+                visible=False,
             )
             download_task = DownloadTask(
-                task_id=task_id, url=url, path=dest_path / filename
+                task_id=task_id, url=pic.path, path=dest_path / filename
             )
             tasks.append(bounded_download(download_task))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         # Handle any exceptions that occurred
-        for url, result in zip(urls, results):
+        for pic, result in zip(pics, results):
             if isinstance(result, Exception):
-                log.error(f"Failed to download {url}: {result}")
+                log.error(f"Failed to download {pic}: {result}")
 
 
-def download(urls: list[tuple[str, bool]], dest_dir=Args.SAVE_PATH):
+def download(pics: list[tuple[TargetPic, bool]], dest_dir=Args.SAVE_PATH):
     """Entry point for downloads - runs async code in event loop"""
     try:
-        asyncio.run(download_async(urls, dest_dir))
+        asyncio.run(download_async(pics, dest_dir))
     except KeyboardInterrupt:
         log.info("Download interrupted by user")
         done_event.set()
@@ -570,20 +585,12 @@ def download(urls: list[tuple[str, bool]], dest_dir=Args.SAVE_PATH):
         done_event.set()
 
 
-@dataclass
-class TargetPic:
-    id: str
-    resolution: str
-    url: str
-    file_size: int
-
-
-def download_one_pic(target_pic: TargetPic) -> None | tuple[str, bool]:
+def download_one_pic(target_pic: TargetPic) -> None | tuple[TargetPic, bool]:
     """下载指定 URL 的单张图片到指定路径。
     Args:
-        target_pic: 包含图片 ID、分辨率、URL 和文件类型的字典。
+        target_pic:
     """
-    url = target_pic.url
+    url = target_pic.path
     filename = url.split("/")[-1]
     filesize = target_pic.file_size
     pic_path = f"{Args.SAVE_PATH}/{filename}"
@@ -601,10 +608,7 @@ def download_one_pic(target_pic: TargetPic) -> None | tuple[str, bool]:
                 f"图片不完整，重新下载 <{filename}> <{file_info.st_size} -> {filesize}>"
             )
             again = True
-        # if is_valid_image(pic_path):
-        #     return
-    # wget(url, pic_path)
-    return url, again
+    return target_pic, again
 
 
 def handle_server_response(response_bytes) -> Any:
@@ -623,7 +627,7 @@ def handle_server_response(response_bytes) -> Any:
         log.critical(f"结果转化错误: {e}")
 
 
-def get_pending_pic_url(wallhaven_url: str) -> list:
+def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
     """从 Wallhaven API 检索待处理的图片 URL 列表。
     Args:
         wallhaven_url: 查询图片数据的 URL。
@@ -634,37 +638,40 @@ def get_pending_pic_url(wallhaven_url: str) -> list:
     # response_res = requests.get(wallhaven_url, proxies=proxies).content
     response_res = requests.get(url=wallhaven_url).content
     response_res_dict = handle_server_response(response_bytes=response_res)
-    pending_pic_url_list = []
     if not response_res_dict.get("data"):
         log.critical("获取图片列表失败")
-        raise Exception("获取图片列表失败")  # 使用异常处理代替 exit(1)
-    for pic_msg in response_res_dict["data"]:
-        pic_msg_main = TargetPic(
-            id=pic_msg["id"],
-            resolution=pic_msg["resolution"],
-            url=pic_msg["path"],
-            file_size=pic_msg["file_size"],
+        raise Exception("获取图片列表失败")
+    target_pics_list = []
+    for pic in response_res_dict.get("data"):
+        target_pics_list.append(
+            TargetPic(
+                id=pic.get("id"),
+                file_size=pic.get("file_size"),
+                path=pic.get("path"),
+                resolution=pic.get("resolution"),
+                purity=pic.get("purity"),
+                colors=pic.get("colors"),
+            )
         )
-        pending_pic_url_list.append(pic_msg_main)
-    return pending_pic_url_list
+    return target_pics_list
 
 
 def download_all_pics():
     """从 Wallhaven 下载指定页面范围的所有图像。"""
     global all
-    urls = []
+    pics = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
         wallhaven_url = wallhaven_url_base + str(page_num)
-        pending_pic_url_list: list[TargetPic] = get_pending_pic_url(wallhaven_url)
+        pending_pic_list: list[TargetPic] = get_pending_pic_url(wallhaven_url)
         num = 0
-        for target_pic in pending_pic_url_list:
-            url: None | tuple[str, bool] = download_one_pic(target_pic)
-            if url:
-                urls.append(url)
+        for target_pic in pending_pic_list:
+            pic: None | tuple[TargetPic, bool] = download_one_pic(target_pic)
+            if pic:
+                pics.append(pic)
                 num += 1
-        log.info(f"下载第{page_num}页图片: {num}/{len(pending_pic_url_list)}")
-    all = len(urls)
-    download(urls)
+        log.info(f"下载第{page_num}页图片: {num}/{len(pending_pic_list)}")
+    all = len(pics)
+    download(pics)
     log.info("图片下载完成")
 
 
