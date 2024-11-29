@@ -1,11 +1,11 @@
 """
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.10.3
+Version: 0.10.4
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Thursday, 2024-11-28 15:10:23
+Last Modified: Friday, 2024-11-29 11:04:45
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -22,7 +22,7 @@ import requests
 import signal
 import time
 from collections import deque
-from collections.abc import Iterable
+from functools import lru_cache
 from typing import Any
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
@@ -41,6 +41,7 @@ from rich.progress import (
     TaskID,
 )
 from rich.table import Column
+
 
 from APIKey import APIKey
 
@@ -103,9 +104,9 @@ class Args:
 
 #!##############################################################################
 # 配置
-max_files = 64 * (Args.MAX_PAGE + 1)
-"""max_files (int): 要保留的最大文件数量，默认为 64 * (Args.MAX_PAGE + 1)。
-- 理论上是 Args.MAX_PAGE +1 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后删除。
+max_files = 128
+"""max_files (int): 要保留的最大文件数量，默认为 64 * 2。
+- 理论上是 Args.MAX_PAGE 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后重复删除。
 - 建议保存图片数应大于 单页数量 * 下载页数。"""
 wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
 pic_type_map = {
@@ -253,94 +254,168 @@ def format_time(atime: float | None = None) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(atime))
 
 
-def file_size(size_in_bytes: int) -> str:
-    """计算文件大小并返回以MB为单位的字符串表示。
+def format_size(size_bytes: int) -> str:
+    """Convert file size in bytes to human readable format.
+
     Args:
-        size_in_bytes: 文件大小（字节）
+        size_bytes: Size in bytes
 
     Returns:
-        以"X.XX MB"格式表示的文件大小
+        str: Formatted size string (e.g. "1.23 MB")
     """
-    size_in_mb = size_in_bytes / float(1024 * 1024)
-    return f"{round(size_in_mb, 2)} MB"
+    size_mb = size_bytes / (1024 * 1024)
+    return f"{round(size_mb, 2)} MB"
 
 
-def dir_size(path: str | os.PathLike) -> str | int:
-    """计算指定目录的大小。
+@lru_cache(maxsize=128)
+def calculate_dir_size(path: str | Path) -> int:
+    """Calculate total size of directory contents in bytes.
+
     Args:
-        path: 要计算大小的目录路径。
+        path: Directory path
 
     Returns:
-        表示目录大小的字符串，格式为 "X.XX MB"。
+        int: Total size in bytes
     """
-    size = 0
-    if os.path.isdir(path):
-        try:
-            size = sum(
-                sum(
-                    os.path.getsize(os.path.join(walk_result[0], element))
-                    for element in walk_result[2]
-                )
-                for walk_result in os.walk(path)
-            )
-            size = file_size(size)
-        except Exception as e:
-            log.error(f"发生错误: {e}")
-    return size
+    path = Path(path)
+    if not path.is_dir():
+        return 0
+
+    try:
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+    except Exception as e:
+        log.error(f"Error calculating directory size for {path}: {e}")
+        return 0
 
 
-def dir_info(path: str | os.PathLike):
-    """记录目录的信息。
+def get_dir_info(path: str | Path):
+    """Get directory information including size and file count.
+
     Args:
-        path: 要记录信息的目录路径。
+        path: Directory path
+
+    Returns:
+        dict: Directory information containing size and file count
     """
-    if os.path.exists(path):
-        if os.path.isdir(path):
-            log.info(f"<图片目录:{path}> <大小:{dir_size(path)}>")
+    path = Path(path)
+    if not path.exists():
+        log.error(f"Directory does not exist: {path}")
+        return {"exists": False, "is_dir": False, "size": 0, "file_count": 0}
+
+    if not path.is_dir():
+        log.error(f"Path is not a directory: {path}")
+        return {"exists": True, "is_dir": False, "size": 0, "file_count": 0}
+
+    size_bytes = calculate_dir_size(path)
+    file_count = sum(1 for _ in path.rglob("*") if _.is_file())
+
+    info = {
+        "exists": True,
+        "is_dir": True,
+        "size_bytes": size_bytes,
+        "size_formatted": format_size(size_bytes),
+        "file_count": file_count,
+    }
+
+    log.info(f"Directory {path}: {info['size_formatted']}, {info['file_count']} files")
+    return info
+
+
+def remove_file(file_path: str | Path) -> bool:
+    """Safely remove a file.
+
+    Args:
+        file_path: Path to file to remove
+
+    Returns:
+        bool: True if file was successfully removed
+    """
+    file_path = Path(file_path)
+    if not file_path.exists():
+        log.error(f"File does not exist: {file_path}")
+        return False
+
+    if not file_path.is_file():
+        log.warning(f"Path is not a file: {file_path}")
+        return False
+
+    try:
+        file_path.unlink()
+        log.info(f"Successfully removed file: {file_path}")
+        return True
+    except Exception as e:
+        log.error(f"Failed to remove file {file_path}: {e}")
+        return False
+
+
+def clean_directory(
+    directory=Args.SAVE_PATH, max_files=max_files, sort_key: str = "created"
+) -> dict:
+    """Clean directory by removing oldest files while keeping specified number of newest files.
+
+    Args:
+        directory: Directory path to clean
+        max_files: Maximum number of files to keep
+        sort_key: Key to sort files by ('created', 'modified', or 'accessed')
+
+    Returns:
+        dict: Summary of cleaning operation
+    """
+    directory = Path(directory)
+    if not directory.exists():
+        log.error(f"Directory does not exist: {directory}")
+        return {"success": False, "files_removed": 0, "errors": 1}
+
+    if not directory.is_dir():
+        log.error(f"Path is not a directory: {directory}")
+        return {"success": False, "files_removed": 0, "errors": 1}
+
+    # Get all files with their stats
+    try:
+        files_info = []
+        for file_path in directory.iterdir():
+            if file_path.is_file():
+                stat = file_path.stat()
+                timestamp = {
+                    "created": stat.st_ctime,
+                    "modified": stat.st_mtime,
+                    "accessed": stat.st_atime,
+                }.get(sort_key, stat.st_ctime)
+
+                files_info.append((file_path, timestamp))
+    except Exception as e:
+        log.error(f"Error reading directory contents: {e}")
+        return {"success": False, "files_removed": 0, "errors": 1}
+
+    # Sort files by timestamp
+    files_info.sort(key=lambda x: x[1])
+
+    # Calculate files to remove
+    files_to_remove = files_info[:-max_files:] if len(files_info) > max_files else []
+
+    # Remove files
+    removed_count = 0
+    errors = 0
+
+    for file_path, _ in files_to_remove:
+        if remove_file(file_path):
+            removed_count += 1
         else:
-            log.error(f"目标不是目录: {path}")
-    else:
-        log.error(f"图片目录不存在: {path}")
+            errors += 1
 
+    # Get directory info after cleaning
+    final_info = get_dir_info(directory)
 
-def remove_file(file: str | os.PathLike):
-    """移除文件。
-    Args:
-        file: 要移除的文件路径。
-    """
-    if os.path.exists(file):
-        if os.path.isfile(file):
-            os.remove(file)
-            log.info(f"文件删除成功: {file}")
-        else:
-            log.warning(f"目录不可删除: {file}")
-    else:
-        log.error(f"文件不存在: {file}")
+    summary = {
+        "success": errors == 0,
+        "files_removed": removed_count,
+        "errors": errors,
+        "remaining_files": final_info["file_count"],
+        "final_size": final_info["size_formatted"],
+    }
 
-
-def clean_up(path=Args.SAVE_PATH, max_files=max_files):
-    """清理目录中的文件，移除旧文件。
-    Args:
-        path: 要清理的目录路径，默认为 args.savePath。
-        max_files: 要保留的最大文件数量，默认为 64 * 2。
-    """
-    log.info("清理文件")
-    if os.path.exists(path):
-        dir_info(path)
-        files = os.listdir(path)
-        log.info(f"清理前文件数量: {len(files)}")
-        old_pwd = os.getcwd()
-        os.chdir(path)
-        files.sort(key=os.path.getctime)
-        del files[-max_files:]
-
-        for file in files:
-            remove_file(file)
-
-        os.chdir(old_pwd)
-        dir_info(path)
-    else:
-        log.error(f"文件不存在: {path}")
+    log.info(f"Directory cleaning complete: {summary}")
+    return summary
 
 
 @dataclass
@@ -517,7 +592,7 @@ def download_one_pic(target_pic: TargetPic) -> None | tuple[str, bool]:
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.debug(
-            f"图片已存在 <{filename}> <{file_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>"
+            f"图片已存在 <{filename}> <{format_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>"
         )
         if file_info.st_size == filesize:
             return
@@ -602,5 +677,5 @@ if __name__ == "__main__":
     _sep = "-" * 15
     log.info(f"{_sep} START {_sep} >>> {format_time()}")
     wallhaven_download()
-    clean_up()
+    clean_directory()
     log.info(f"{_sep}  END  {_sep} >>> {format_time()}\n")
