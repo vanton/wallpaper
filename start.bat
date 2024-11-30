@@ -5,12 +5,14 @@
 :: File Created: Saturday, 2024-11-23 13:54:47
 :: Author: vanton
 :: -----
-:: Last Modified: Friday, 2024-11-29 16:29:50
+:: Last Modified: Saturday, 2024-11-30 15:18:01
 :: Modified By: vanton
 :: -----
 :: Copyright  2024
 :: License: MIT License
 :: ================
+
+:: cspell:words venv errorlevel
 
 @ECHO OFF
 setlocal EnableDelayedExpansion
@@ -36,7 +38,7 @@ if errorlevel 1 (
 
 
 :: #ANCHOR - Check/Install pip
-%PYTHON% -mpip --help >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"
+%PYTHON% -m pip --help >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"
 if errorlevel 1 (
     if not "%PIP_INSTALLER_LOCATION%"=="" (
         %PYTHON% "%PIP_INSTALLER_LOCATION%" >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"
@@ -68,7 +70,8 @@ if not "%VENV_DIR%"=="-" if not "%SKIP_VENV%"=="1" (
 
     set "PYTHON=%VENV_DIR%\Scripts\Python.exe"
     call "%VENV_DIR%\Scripts\activate.bat"
-    echo Using venv: %PYTHON%
+    echo Using venv: !PYTHON!
+    "%PYTHON%" -c "import sys; print(sys.version)"
 )
 
 :: #ANCHOR - Install Requirements
