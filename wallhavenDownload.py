@@ -5,7 +5,7 @@ Version: 0.10.5
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Saturday, 2024-11-30 15:15:57
+Last Modified: Saturday, 2024-11-30 16:42:19
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -24,7 +24,6 @@ from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Event
-from turtle import color
 from typing import Any
 
 import aiofiles
