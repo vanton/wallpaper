@@ -5,7 +5,7 @@ Version: 0.10.5
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Friday, 2024-11-29 16:27:54
+Last Modified: Saturday, 2024-11-30 15:15:57
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -509,8 +509,7 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | N
             log.warning(f"retry {attempt + 1}/{max_retries} for {task.url}")
             progress.reset(task_id=task.task_id, start=True)
             progress.update(
-                task.task_id,
-                description=f" {attempt + 1}/{max_retries}",
+                task.task_id, description=f" {attempt + 1}/{max_retries}", refresh=True
             )
         result = await copy_url_async(task)
         if result != None:
@@ -681,7 +680,7 @@ def wallhaven_download():
 
 
 if __name__ == "__main__":
-    _sep = "-" * 15
+    _sep = "-" * 8
     log.info(f"{_sep} START {_sep} >>> {format_time()}")
     wallhaven_download()
     clean_directory()
