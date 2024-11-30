@@ -1,8 +1,9 @@
 import asyncio
 import random
-import enlighten
 
-from Enlighten.gen_colors import generate_colors
+from generate_colors import generate_colors
+
+import enlighten
 
 manager = enlighten.get_manager()
 chunk_size = 64 * 1024  # 64 KiB
