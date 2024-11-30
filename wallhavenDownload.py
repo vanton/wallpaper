@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.10.5
+Version: 0.10.6
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Saturday, 2024-11-30 16:42:19
+Last Modified: Saturday, 2024-11-30 21:40:46
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -40,6 +40,7 @@ from rich.progress import (
     TimeRemainingColumn,
     TransferSpeedColumn,
 )
+from rich.style import Style
 from rich.table import Column
 
 from APIKey import APIKey
@@ -138,9 +139,10 @@ class AdvProgress(Progress):
 
 
 progress = AdvProgress(
-    TextColumn(text_format="[bold blue]{task.fields[filename]}", justify="right"),
+    TextColumn(text_format="[blue]{task.fields[filename]}", justify="right"),
     "{task.fields[colors]}",
-    BarColumn(),
+    "{task.fields[purity]}",
+    BarColumn(pulse_style=Style(color="gray50")),
     "[progress.percentage]{task.percentage:>3.1f}%",
     "•",
     DownloadColumn(table_column=Column(justify="center")),
@@ -148,8 +150,8 @@ progress = AdvProgress(
     TransferSpeedColumn(table_column=Column(justify="right")),
     "•",
     TimeRemainingColumn(),
-    TextColumn(text_format="[gray]{task.description}"),
-    auto_refresh=False,
+    TextColumn(text_format="{task.description}"),
+    # auto_refresh=False,
 )
 console = progress.console
 """`logging` 与 `progress` 输出使用同一个 `console` 实例，以防止输出冲突"""
@@ -425,7 +427,7 @@ class DownloadTask:
     url: str
     path: Path
     chunk_size: int = 64 * 1024  # 64KB chunks
-    timeout: int = 20
+    # timeout: int = 60
     headers: dict[str, str] | None = None
 
     def __post_init__(self):
@@ -448,9 +450,8 @@ async def copy_url_async(task: DownloadTask) -> None | TaskID:
     """
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                task.url, headers=task.headers, timeout=task.timeout
-            ) as response:
+            # async with session.get(task.url, headers=task.headers, timeout=task.timeout) as response:
+            async with session.get(task.url, headers=task.headers) as response:
                 if response.status != 200:
                     log.error(f"HTTP {response.status} for {task.url}")
                     return None
@@ -458,24 +459,19 @@ async def copy_url_async(task: DownloadTask) -> None | TaskID:
                 progress.update(task_id=task.task_id, total=total_size)
                 async with aiofiles.open(task.path, "wb") as dest_file:
                     progress.start_task(task.task_id)
-                    progress.update(task.task_id, visible=True)
                     downloaded = 0
                     async for chunk in response.content.iter_chunked(task.chunk_size):
                         if done_event.is_set():
                             return task.task_id
                         await dest_file.write(chunk)
                         downloaded += len(chunk)
-                        progress.update(task.task_id, advance=len(chunk), refresh=True)
+                        progress.update(task.task_id, advance=len(chunk))
                     if downloaded == total_size:
-                        progress.update(
-                            task.task_id, description="[green]", refresh=True
-                        )
+                        progress.update(task.task_id, description="[green]")
                         return task.task_id
                     else:
                         log.warning(f"Incomplete download for {task.url}")
-                        progress.update(
-                            task.task_id, description="[red]", refresh=True
-                        )
+                        progress.update(task.task_id, description="[red]")
     except KeyboardInterrupt:
         log.info("Download interrupted by user")
         done_event.set()
@@ -494,7 +490,7 @@ def set_done(task_id: TaskID):
         done_list.append(task_id)
         count += 1
     _length = len(done_list)
-    if (_length > window_height - 15 and _length > 10) or _length > 24:
+    if (_length > window_height - 15 and _length > 10) or _length > 10:
         progress.remove_task(done_list.popleft())  # cspell:words popleft
 
     progress.set_title(f"Progress: {count}/{all}")
@@ -503,18 +499,17 @@ def set_done(task_id: TaskID):
 async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | None:
     """Attempt to download with retries on failure"""
     for attempt in range(max_retries):
+        progress.update(task.task_id, visible=True)
         if attempt > 0:
             await asyncio.sleep(2**attempt)  # Exponential backoff
             log.warning(f"retry {attempt + 1}/{max_retries} for {task.url}")
             progress.reset(task_id=task.task_id, start=True)
-            progress.update(
-                task.task_id, description=f" {attempt + 1}/{max_retries}", refresh=True
-            )
+            progress.update(task.task_id, description=f" {attempt + 1}/{max_retries}")
         result = await copy_url_async(task)
         if result != None:
             set_done(task_id=task.task_id)
             return result
-    progress.update(task.task_id, description="[red]", refresh=True)
+    progress.update(task.task_id, description="[red]")
     set_done(task_id=task.task_id)
 
 
@@ -540,33 +535,42 @@ async def download_async(
     dest_path = Path(dest_dir)
     dest_path.mkdir(parents=True, exist_ok=True)
     semaphore = asyncio.Semaphore(max_concurrent)
-    tasks = []
+    # Pre-process all tasks
+    download_tasks = [
+        DownloadTask(
+            task_id=progress.add_task(
+                description="" if not again else "",
+                filename=pic.path.split("/")[-1],
+                colors="".join(f"[{color}]██" for color in pic.colors),
+                purity=(
+                    f"[red]{pic.purity}"
+                    if pic.purity.lower() == "nsfw"
+                    else (
+                        f"[green]{pic.purity}"
+                        if pic.purity.lower() == "sfw"
+                        else f"[yellow]{pic.purity}"
+                    )
+                ),
+                start=False,
+                visible=False,
+            ),
+            url=pic.path,
+            path=dest_path / pic.path.split("/")[-1],
+        )
+        for pic, again in pics
+    ]
 
     async def bounded_download(task: DownloadTask) -> TaskID | None:
         async with semaphore:
             return await download_with_retries(task=task)
 
     with progress:
-        for pic, again in pics:
-            filename = pic.path.split("/")[-1]
-            # colors = "[#990033]█[#339966]█[#993366]█[#FF9933]█[#6666FF]█"
-            colors = "".join([f"[{color}]██" for color in pic.colors])
-            description = "" if again else ""
-            task_id: TaskID = progress.add_task(
-                description=description,
-                filename=filename,
-                colors=colors,
-                start=False,
-                visible=False,
-            )
-            download_task = DownloadTask(
-                task_id=task_id, url=pic.path, path=dest_path / filename
-            )
-            tasks.append(bounded_download(download_task))
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        # Handle any exceptions that occurred
-        for pic, result in zip(pics, results):
+        results = await asyncio.gather(
+            *(bounded_download(task) for task in download_tasks),
+            return_exceptions=True,
+        )
+        # Handle exceptions
+        for (pic, _), result in zip(pics, results):
             if isinstance(result, Exception):
                 log.error(f"Failed to download {pic}: {result}")
 
@@ -662,12 +666,17 @@ def download_all_pics():
         wallhaven_url = wallhaven_url_base + str(page_num)
         pending_pic_list: list[TargetPic] = get_pending_pic_url(wallhaven_url)
         num = 0
+        purity = {"sfw": 0, "sketchy": 0, "nsfw": 0}
         for target_pic in pending_pic_list:
             pic: None | tuple[TargetPic, bool] = download_one_pic(target_pic)
             if pic:
                 pics.append(pic)
                 num += 1
-        log.info(f"下载第{page_num}页图片: {num}/{len(pending_pic_list)}")
+                purity[pic[0].purity] += 1
+        log.info(
+            f"下载第{page_num}页图片: {num:>2}/{len(pending_pic_list)} "
+            f"{{sfw:{purity['sfw']:>2} / sketchy:{purity['sketchy']:>2} / nsfw:{purity['nsfw']:>2}}}"
+        )
     all = len(pics)
     download(pics)
     log.info("图片下载完成")
