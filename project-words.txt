@@ -6,11 +6,13 @@ atleast
 endlocal
 levelname
 pycache
+pyproject
 pytest
 renderable
 renderables
 setlocal
 signum
+stackoverflow
 toplist
 venv
 wallhaven
