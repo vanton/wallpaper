@@ -1,29 +1,4 @@
 {
-    "cSpell.words": [
-        "addrs",
-        "aiofiles",
-        "aiohttp",
-        "apikey",
-        "asyncio",
-        "atleast",
-        "DGRAM",
-        "endlocal",
-        "endofscript",
-        "gethostname",
-        "levelname",
-        "levelno",
-        "psutil",
-        "renderable",
-        "renderables",
-        "setlocal",
-        "signum",
-        "toplist",
-        "trange",
-        "virtualenvs",
-        "wallhaven",
-        "wrapmodule",
-        "XGET"
-    ],
     "python.testing.pytestArgs": [
         "tests"
     ],

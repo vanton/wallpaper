@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.10.6
+Version: 0.10.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Saturday, 2024-11-30 21:40:46
+Last Modified: Monday, 2024-12-02 00:04:23
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -139,6 +139,7 @@ class AdvProgress(Progress):
 
 
 progress = AdvProgress(
+    TextColumn(text_format="{task.id}", justify="right"),
     TextColumn(text_format="[blue]{task.fields[filename]}", justify="right"),
     "{task.fields[colors]}",
     "{task.fields[purity]}",
@@ -289,7 +290,7 @@ def calculate_dir_size(path: str | Path) -> int:
         return 0
 
 
-def get_dir_info(path: str | Path):
+def get_dir_info(path: str | Path) -> dict:
     """Get directory information including size and file count.
 
     Args:
@@ -472,15 +473,20 @@ async def copy_url_async(task: DownloadTask) -> None | TaskID:
                     else:
                         log.warning(f"Incomplete download for {task.url}")
                         progress.update(task.task_id, description="[red]")
+                        return None
     except KeyboardInterrupt:
         log.info("Download interrupted by user")
         done_event.set()
+        return None
     except asyncio.TimeoutError:
         log.error(f"Timeout downloading {task.url}")
+        return None
     except aiohttp.ClientError as e:
         log.error(f"Network error for {task.url}: {e}")
+        return None
     except Exception as e:
         log.error(f"Unexpected error downloading {task.url}: {e}")
+        return None
 
 
 def set_done(task_id: TaskID):
@@ -509,8 +515,10 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | N
         if result != None:
             set_done(task_id=task.task_id)
             return result
+    remove_file(task.path)
     progress.update(task.task_id, description="[red]")
     set_done(task_id=task.task_id)
+    return None
 
 
 @dataclass
@@ -524,7 +532,7 @@ class TargetPic:
 
 
 async def download_async(
-    pics: list[tuple[TargetPic, bool]], dest_dir=Args.SAVE_PATH, max_concurrent=4
+    pics: list[tuple[TargetPic, bool]], dest_dir=Args.SAVE_PATH, max_concurrent=5
 ):
     """Download multiple files concurrently to the given directory.
     Args:
@@ -539,7 +547,7 @@ async def download_async(
     download_tasks = [
         DownloadTask(
             task_id=progress.add_task(
-                description="" if not again else "",
+                description="" if not again else "",
                 filename=pic.path.split("/")[-1],
                 colors="".join(f"[{color}]██" for color in pic.colors),
                 purity=(
@@ -604,7 +612,7 @@ def download_one_pic(target_pic: TargetPic) -> None | tuple[TargetPic, bool]:
             f"图片已存在 <{filename}> <{format_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>"
         )
         if file_info.st_size == filesize:
-            return
+            return None
         else:
             log.debug(
                 f"图片不完整，重新下载 <{filename}> <{file_info.st_size} -> {filesize}>"
@@ -643,7 +651,7 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
     if not response_res_dict.get("data"):
         log.critical("获取图片列表失败")
         raise Exception("获取图片列表失败")
-    target_pics_list = []
+    target_pics_list: list[TargetPic] = []
     for pic in response_res_dict.get("data"):
         target_pics_list.append(
             TargetPic(
@@ -664,11 +672,11 @@ def download_all_pics():
     pics = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
         wallhaven_url = wallhaven_url_base + str(page_num)
-        pending_pic_list: list[TargetPic] = get_pending_pic_url(wallhaven_url)
+        pending_pic_list = get_pending_pic_url(wallhaven_url)
         num = 0
         purity = {"sfw": 0, "sketchy": 0, "nsfw": 0}
         for target_pic in pending_pic_list:
-            pic: None | tuple[TargetPic, bool] = download_one_pic(target_pic)
+            pic = download_one_pic(target_pic)
             if pic:
                 pics.append(pic)
                 num += 1
