@@ -3,9 +3,13 @@ aiohttp
 apikey
 asyncio
 atleast
+docstrings
+doctests
 endlocal
 levelname
 pycache
+pycodestyle
+Pyflakes
 pyproject
 pytest
 renderable
