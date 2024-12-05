@@ -5,7 +5,7 @@ Version: 0.10.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Monday, 2024-12-02 00:04:23
+Last Modified: Thursday, 2024-12-05 20:38:43
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -512,7 +512,7 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | N
             progress.reset(task_id=task.task_id, start=True)
             progress.update(task.task_id, description=f" {attempt + 1}/{max_retries}")
         result = await copy_url_async(task)
-        if result != None:
+        if result is not None:
             set_done(task_id=task.task_id)
             return result
     remove_file(task.path)

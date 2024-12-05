@@ -15,4 +15,5 @@ signum
 stackoverflow
 toplist
 venv
+virtualenvs
 wallhaven
