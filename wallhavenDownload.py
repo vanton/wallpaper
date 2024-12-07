@@ -5,7 +5,7 @@ Version: 0.10.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Thursday, 2024-12-05 20:38:43
+Last Modified: Saturday, 2024-12-07 21:29:29
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -29,6 +29,8 @@ from typing import Any
 import aiofiles
 import aiohttp
 import requests
+
+from APIKey import APIKey
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
@@ -42,8 +44,6 @@ from rich.progress import (
 )
 from rich.style import Style
 from rich.table import Column
-
-from APIKey import APIKey
 
 
 @dataclass(frozen=True)
@@ -104,7 +104,7 @@ class Args:
 
 #!##############################################################################
 # 配置
-max_files = 24 * Args.MAX_PAGE + 4
+max_files = 24 * Args.MAX_PAGE
 """max_files (int): 要保留的最大文件数量，默认为 24 * Args.MAX_PAGE + 4。
 - 理论上是 Args.MAX_PAGE 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后重复删除。
 - 建议保存图片数应大于 单页数量 * 下载页数。"""
@@ -343,7 +343,7 @@ def remove_file(file_path: str | Path) -> bool:
 
     try:
         file_path.unlink()
-        log.info(f"Successfully removed file: {file_path}")
+        log.debug(f"Successfully removed file: {file_path}")
         return True
     except Exception as e:
         log.error(f"Failed to remove file {file_path}: {e}")
@@ -393,7 +393,12 @@ def clean_directory(
     files_info.sort(key=lambda x: x[1])
 
     # Calculate files to remove
-    files_to_remove = files_info[:-max_files:] if len(files_info) > max_files else []
+    global all
+    if max_files < all:
+        max_files = all
+    files_to_remove = (
+        files_info[: -(max_files + 4) :] if len(files_info) > max_files else []
+    )
 
     # Remove files
     removed_count = 0
@@ -517,7 +522,7 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | N
             return result
     remove_file(task.path)
     progress.update(task.task_id, description="[red]")
-    set_done(task_id=task.task_id)
+    # set_done(task_id=task.task_id)
     return None
 
 
