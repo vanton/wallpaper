@@ -1,13 +1,13 @@
 {
-    "python.testing.pytestArgs": [
-        "tests"
+    "cSpell.ignorePaths": [
+        "package-lock.json",
+        "node_modules",
+        "vscode-extension",
+        ".git/{info,lfs,logs,refs,objects}/**",
+        ".git/{index,*refs,*HEAD}",
+        ".vscode",
+        ".vscode-insiders",
+        "poetry.lock"
     ],
-    "python.testing.unittestEnabled": true,
-    "python.testing.pytestEnabled": true,
-    "psi-header.variables": [
-        [
-            "projectCreationYear",
-            "2021"
-        ],
-    ],
+    "psi-header.variables": [["projectCreationYear", "2021"]]
 }
