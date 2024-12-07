@@ -1,10 +1,10 @@
-__pycache__
-.venv
-Pic/*.*
-log/*.*
-tmp/**
-APIKey.py
 !.keep
+.venv
+__pycache__
+APIKey.py
+async_progress.py
+log/*.*
+Pic/*.*
 rich/**
 stackoverflow/**
-async_progress.py
+tmp/**
