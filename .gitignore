@@ -7,3 +7,4 @@ APIKey.py
 !.keep
 rich/**
 stackoverflow/**
+async_progress.py
