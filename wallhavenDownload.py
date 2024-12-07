@@ -5,7 +5,7 @@ Version: 0.10.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Saturday, 2024-12-07 21:29:29
+Last Modified: Saturday, 2024-12-07 22:57:45
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -29,8 +29,6 @@ from typing import Any
 import aiofiles
 import aiohttp
 import requests
-
-from APIKey import APIKey
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
@@ -44,6 +42,8 @@ from rich.progress import (
 )
 from rich.style import Style
 from rich.table import Column
+
+from APIKey import APIKey
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class Args:
         MAX_PAGE (int): Maximum pages to download
     """
 
-    categories: str = "110"
+    categories: str = "111"
     purity: str = "100"
     ai_art_filter: str = "0"
     sorting: str = "hot"
