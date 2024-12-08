@@ -6,6 +6,8 @@ atleast
 docstrings
 doctests
 endlocal
+errorlevel
+findstr
 levelname
 pycache
 pycodestyle
@@ -15,6 +17,7 @@ pytest
 renderable
 renderables
 setlocal
+setuptools
 signum
 stackoverflow
 toplist
