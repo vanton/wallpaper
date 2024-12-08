@@ -1,18 +1,17 @@
 :: ================
 :: File: \start.bat
 :: Project: wallpaper
-:: Version: 0.10.5
+:: Version: 0.10.7
 :: File Created: Saturday, 2024-11-23 13:54:47
 :: Author: vanton
 :: -----
-:: Last Modified: Saturday, 2024-11-30 15:18:01
+:: Last Modified: Sunday, 2024-12-08 15:13:45
 :: Modified By: vanton
 :: -----
 :: Copyright  2024
 :: License: MIT License
 :: ================
 
-:: cspell:words venv errorlevel
 
 @ECHO OFF
 setlocal EnableDelayedExpansion
@@ -75,8 +74,12 @@ if not "%VENV_DIR%"=="-" if not "%SKIP_VENV%"=="1" (
 )
 
 :: #ANCHOR - Install Requirements
+if not exist "requirements.txt" (
+    echo Error: requirements.txt not found
+    goto :error_handler
+)
 if not exist "%TEMP_DIR%\requirements" (
-    "%VENV_DIR%\Scripts\Python.exe" -m pip install -r requirements.txt >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"
+    "%PYTHON%" -m pip install -r requirements.txt >"%TEMP_DIR%\stdout.txt" 2>"%TEMP_DIR%\stderr.txt"
     if errorlevel 1 (
         echo Error: Failed to install requirements
         goto :error_handler
