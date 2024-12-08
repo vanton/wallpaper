@@ -5,7 +5,7 @@ Version: 0.10.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Saturday, 2024-12-07 22:57:45
+Last Modified: Sunday, 2024-12-08 16:37:28
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -394,10 +394,9 @@ def clean_directory(
 
     # Calculate files to remove
     global all
-    if max_files < all:
-        max_files = all
+    max_files = all if max_files < all else max_files
     files_to_remove = (
-        files_info[: -(max_files + 4) :] if len(files_info) > max_files else []
+        files_info[: -(max_files + 10) :] if len(files_info) > max_files else []
     )
 
     # Remove files
