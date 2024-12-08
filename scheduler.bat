@@ -7,3 +7,4 @@ cd /d "%~dp0"
 call start.bat
 
 endlocal
+exit /b
