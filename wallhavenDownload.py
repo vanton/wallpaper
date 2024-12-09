@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.11.0
+Version: 0.11.1
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Monday, 2024-12-09 14:15:53
+Last Modified: Monday, 2024-12-09 15:02:55
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -30,8 +30,6 @@ from typing import Any
 import aiofiles
 import aiohttp
 import requests
-
-from APIKey import APIKey
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
@@ -45,6 +43,8 @@ from rich.progress import (
 )
 from rich.style import Style
 from rich.table import Column
+
+from APIKey import APIKey
 
 
 @dataclass(frozen=True)
@@ -718,7 +718,7 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
     response_res_dict = handle_server_response(response_bytes=response_res)
     if not response_res_dict.get("data"):
         log.critical("获取图片列表失败")
-        raise Exception("获取图片列表失败")
+        # raise Exception("获取图片列表失败")
     target_pics_list: list[TargetPic] = []
     for pic in response_res_dict.get("data"):
         target_pics_list.append(

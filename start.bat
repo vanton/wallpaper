@@ -1,11 +1,11 @@
 :: ================
 :: File: \start.bat
 :: Project: wallpaper
-:: Version: 0.10.7
+:: Version: 0.11.1
 :: File Created: Saturday, 2024-11-23 13:54:47
 :: Author: vanton
 :: -----
-:: Last Modified: Sunday, 2024-12-08 15:13:45
+:: Last Modified: Monday, 2024-12-09 15:02:39
 :: Modified By: vanton
 :: -----
 :: Copyright  2024
@@ -21,6 +21,7 @@ if not defined SCHEDULER set "SCHEDULER=0"
 if not defined PYTHON set "PYTHON=python"
 if defined GIT set "GIT_PYTHON_GIT_EXECUTABLE=%GIT%"
 if not defined VENV_DIR set "VENV_DIR=%~dp0%.venv"
+if not defined PIP_INSTALLER_LOCATION set "PIP_INSTALLER_LOCATION=https://bootstrap.pypa.io/get-pip.py"
 set "ERROR_REPORTING=FALSE"
 set "TEMP_DIR=%~dp0tmp"
 
@@ -88,7 +89,15 @@ if not exist "%TEMP_DIR%\requirements" (
 )
 
 :: #ANCHOR - Launch main application
-%PYTHON% wallhavenDownload.py %*
+set "ARGS="
+:parse_args
+if "%~1"=="" goto :end_parse_args
+set "ARGS=%ARGS% %~1"
+shift
+goto :parse_args
+:end_parse_args
+
+%PYTHON% wallhavenDownload.py %ARGS%
 if not %SCHEDULER%==1 pause
 goto :cleanup
 
