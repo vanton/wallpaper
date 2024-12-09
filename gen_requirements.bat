@@ -32,7 +32,7 @@ if exist "%TEMP_REQUIREMENTS%" del "%TEMP_REQUIREMENTS%"
 echo Generating requirements.txt...
 for /f "delims=" %%i in ('pip list --local --exclude pip --exclude setuptools --exclude wheel --not-required --format=freeze') do (
     echo %%i
-    echo %%i| findstr /v "pre_commit pytest types-" >>"%TEMP_REQUIREMENTS%"
+    echo %%i| findstr /v "pre_commit pytest ruff types-" >>"%TEMP_REQUIREMENTS%"
 )
 
 :: Move temporary file to final location
