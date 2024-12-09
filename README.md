@@ -33,6 +33,8 @@ This project is a wallpaper downloader for [wallhaven.cc](https://wallhaven.cc).
 > .\start.bat --help
 ```
 
+![alt text](screenshots/screenshot.png)
+
 ### for linux/Mac
 1. Install the requirements use `requirements.txt` and run the `wallhavenDownload.py`.
 
