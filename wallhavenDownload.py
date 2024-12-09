@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.11.1
+Version: 0.12.0
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Monday, 2024-12-09 15:02:55
+Last Modified: Tuesday, 2024-12-10 01:43:13
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -44,86 +44,7 @@ from rich.progress import (
 from rich.style import Style
 from rich.table import Column
 
-from APIKey import APIKey
-
-
-@dataclass(frozen=True)
-class Args:
-    """需要时请修改此参数
-
-    See: https://wallhaven.cc/help/api#search
-
-    Attributes:
-        categories (str): = `100`/`101`/`111`*/etc (general/anime/people) - Turn categories on(1) or off(0)
-        purity (str): = `100`*/`110`/`111`/etc (sfw/sketchy/nsfw) - Turn purities on(1) or off(0) - NSFW requires a valid API key
-        ai_art_filter (str): = `0`/`1` - AI art filter - off(0) allow AI
-        sorting (str): = "hot" `date_added`*, `relevance`, `random`, `views`, `favorites`, `toplist`- Method of sorting results
-        order (str): = `desc`*, `asc` - Sorting order
-        topRange (str): = `1d`, `3d`, `1w`, `1M`*, `3M`, `6M`, `1y` - Sorting MUST be set to 'toplist'
-        ratios (str): = 16x9,16x10,`landscape`,`portrait`,`square` - List of aspect ratios - Single ratio allowed
-        atleast (str): = `1920x1080` - Minimum resolution allowed
-
-        SAVE_PATH (str): Where images are saved
-        MAX_PAGE (int): Maximum pages to download
-    """
-
-    categories: str = "110"
-    purity: str = "100"
-    ai_art_filter: str = "0"
-    sorting: str = "hot"
-    order: str = "desc"
-    topRange: str = "1w"
-    ratios: str = "landscape"
-    atleast: str = "1000x1000"
-
-    SAVE_PATH: str = "./Pic"
-    MAX_PAGE: int = 4
-
-
-"""
-: command: python3 wallhavenDownload.py - m toplist - s./Pic - p 1
-: command: python3 wallhavenDownload.py - m latest - s./Pic - p 1
-: command: python3 wallhavenDownload.py - m hot - s ./Pic - p 1
-
-参数说明:
---categories 110
--c 110
-爬取图片分类 General, Anime, People:
-    110 -> General+Anime,
-    111 -> General+Anime+People, (默认)
-    100 -> General
---mode {toplist, latest, hot}
--m hot
-爬取图片模式，{toplist, latest, hot} 三种模式，默认为 hot
---savePath savePath
--s ./Pic
-图片保存路径，默认 ./Pic
---maxPage maxPage
--p 1
-最大页数, 默认 1
-"""
-
-#!##############################################################################
-# 配置
-max_files = 24 * Args.MAX_PAGE
-"""max_files (int): 要保留的最大文件数量，默认为 24 * Args.MAX_PAGE + 4。
-- 理论上是 Args.MAX_PAGE 页的数量; 如果一次下载图片过多, 会发生重复下载图片然后重复删除。
-- 建议保存图片数应大于 单页数量 * 下载页数。"""
-wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
-pic_type_map = {
-    "image/png": "png",
-    "image/jpeg": "jpg",
-}
-DEBUG: bool = True
-
-# 参数解析
-# parser = argparse.ArgumentParser()
-# # General, Anime, People: 110 - General+Anime, 111 - General+Anime+People
-# parser.add_argument('--categories', '-c', default='100', help='爬取图片分类 General, Anime, People: 110 - General+Anime, 111 - General+Anime+People')
-# parser.add_argument('--mode', '-m', default='hot', choices=['toplist', 'latest', 'hot'], help='爬取图片模式')
-# parser.add_argument('--savePath', '-s', default='./Pic', help='图片保存路径')
-# parser.add_argument('--maxPage', '-p', default=2, help='最大页数')
-# args = parser.parse_args()
+from configs import DEBUG, APIKey, Args, max_files, wallhaven_url_base
 
 #!##############################################################################
 
@@ -156,7 +77,7 @@ progress = AdvProgress(
     # auto_refresh=False,
 )
 console = progress.console
-"""`logging` 与 `progress` 输出使用同一个 `console` 实例，以防止输出冲突"""
+"""`logging` and `progress` output use the same `console` instance to prevent output conflicts"""
 window_width, window_height = console.size
 done_event = Event()
 
@@ -182,18 +103,18 @@ class Log:
     def __init__(
         self,
         logPath="./log/wallhavenDownload.log",
-        when="D",  # 按天轮换日志
-        maxBytes=1024 * 64,  # 轮换日志大小
-        backupCount=5,  # 保留日志文件数量
+        when="D",  # Rotate logs by day (This parameter is not used yet)
+        maxBytes=1024 * 64,  # Rotation log size
+        backupCount=5,  # Number of log files to keep
     ):
-        # 文件不存在则创建
+        # Create file if it does not exist
         if not os.path.exists(os.path.dirname(logPath)):
             os.makedirs(os.path.dirname(logPath))
         if not os.path.exists(logPath):
             with open(logPath, "w", encoding="UTF-8") as f:
                 f.write("")
 
-        # 重命名备份日志文件
+        # Rename backup log files from "log.log.2021-11-06" to "log.2021-11-06.log"
         def custom_namer(default_name: str) -> str:
             base_filename, ext, date = default_name.split(".")
             return f"{base_filename}.{date}.{ext}"
@@ -233,13 +154,13 @@ def parse_args():
         "--categories",
         "-c",
         default=Args.categories,
-        help="爬取图片分类 General, Anime, People: 110 - General+Anime, 111 - General+Anime+People",
+        help="Crawl image classification: General, Anime, People: 110 - General+Anime, 111 - General+Anime+People",
     )
     parser.add_argument(
         "--purity",
         "-p",
         default=Args.purity,
-        help="图片纯度: 100 - sfw, 110 - sfw+sketchy, 111 - sfw+sketchy+nsfw",
+        help="Picture purity: 100 - sfw, 110 - sfw+sketchy, 111 - sfw+sketchy+nsfw",
     )
     parser.add_argument(
         "--ai_art_filter",
@@ -251,27 +172,35 @@ def parse_args():
         "--sorting",
         "-s",
         default=Args.sorting,
-        help="排序方式: hot, date_added, relevance, random, views, favorites, toplist",
+        help="sort by: hot, date_added, relevance, random, views, favorites, toplist",
     )
-    parser.add_argument("--order", "-o", default=Args.order, help="排序顺序: desc, asc")
+    parser.add_argument(
+        "--order", "-o", default=Args.order, help="sort order: desc, asc"
+    )
     parser.add_argument(
         "--topRange",
         "-t",
         default=Args.topRange,
-        help="toplist 排序范围: 1d, 3d, 1w, 1M, 3M, 6M, 1y",
+        help="toplist sort range: 1d, 3d, 1w, 1M, 3M, 6M, 1y",
     )
     parser.add_argument(
         "--ratios",
         "-r",
         default=Args.ratios,
-        help="宽高比: 16x9, 16x10, landscape, portrait, square",
+        help="aspect ratio: 16x9, 16x10, landscape, portrait, square",
     )
     parser.add_argument(
-        "--atleast", "-l", default=Args.atleast, help="最小分辨率: 1920x1080"
+        "--atleast", "-l", default=Args.atleast, help="minimum resolution: 1920x1080"
     )
-    parser.add_argument("--savePath", "-d", default=Args.SAVE_PATH, help="图片保存路径")
     parser.add_argument(
-        "--maxPage", "-m", type=int, default=Args.MAX_PAGE, help="最大页数"
+        "--savePath", "-d", default=Args.SAVE_PATH, help="Picture saving path"
+    )
+    parser.add_argument(
+        "--maxPage",
+        "-m",
+        type=int,
+        default=Args.MAX_PAGE,
+        help="Maximum number of pages",
     )
     return parser.parse_args()
 
@@ -293,11 +222,11 @@ def update_args_from_cli():
 def init_download():
     global wallhaven_url_base
     # https://wallhaven.cc/search?categories=110&purity=100&sorting=hot&order=desc
-    # sorting=toplist toplist
-    # sorting=hot 最热
-    # sorting=latest 最新
-    # atleast=1000x1000 最小尺寸 1000x1000
-    # topRange=1w 一周
+    # sorting=toplist
+    # sorting=hot
+    # sorting=latest
+    # atleast=1000x1000
+    # topRange=1w
 
     wallhaven_url_base += (
         f"apikey={APIKey}&categories={Args.categories}&order=desc&topRange={Args.topRange}&atleast={Args.atleast}"
@@ -305,17 +234,17 @@ def init_download():
     )
     log.info(wallhaven_url_base.split("&", 1)[1])
     # log.info(wallhaven_url_base)
-    # 创建文件保存目录
+    # Create file saving directory
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
 
 def format_time(atime: float | None = None) -> str:
-    """格式化时间
+    """Format time
     Args:
-        atime: 时间戳秒数，或为 None 以格式化当前时间。
+        atime: Timestamp seconds, or None to format the current time.
 
     Returns:
-        格式为 "YYYY-MM-DD HH:MM:SS" 的字符串。
+        "YYYY-MM-DD HH:MM:SS"
     """
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(atime))
 
@@ -457,11 +386,7 @@ def clean_directory(
     files_info.sort(key=lambda x: x[1])
 
     # Calculate files to remove
-    global all
-    max_files = all if max_files < all else max_files
-    files_to_remove = (
-        files_info[: -(max_files + 10) :] if len(files_info) > max_files else []
-    )
+    files_to_remove = files_info[:-(max_files):] if len(files_info) > max_files else []
 
     # Remove files
     removed_count = 0
@@ -664,7 +589,7 @@ def download(pics: list[tuple[TargetPic, bool]], dest_dir=Args.SAVE_PATH):
 
 
 def download_one_pic(target_pic: TargetPic) -> None | tuple[TargetPic, bool]:
-    """下载指定 URL 的单张图片到指定路径。
+    """
     Args:
         target_pic:
     """
@@ -677,48 +602,48 @@ def download_one_pic(target_pic: TargetPic) -> None | tuple[TargetPic, bool]:
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.debug(
-            f"图片已存在 <{filename}> <{format_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>"
+            f"Image already exists: <{filename}> <{format_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>"
         )
         if file_info.st_size == filesize:
             return None
         else:
             log.debug(
-                f"图片不完整，重新下载 <{filename}> <{file_info.st_size} -> {filesize}>"
+                f"Image is incomplete, download again: <{filename}> <{file_info.st_size} -> {filesize}>"
             )
             again = True
     return target_pic, again
 
 
 def handle_server_response(response_bytes) -> Any:
-    """处理来自服务器的响应。
+    """Handle responses from the server.
     Args:
-        response_bytes: 服务器返回的字节数据。
+        response_bytes: Bytes of data returned by the server.
 
     Returns:
-        如果解码和解析成功则返回解析后的 JSON 对象，否则返回 None。
+        Returns the parsed JSON object if decoding and parsing are successful, otherwise None is returned.
     """
     try:
         response_str = response_bytes.decode("utf-8")
         response_dict = json.loads(response_str)
         return response_dict
     except json.JSONDecodeError as e:
-        log.critical(f"结果转化错误: {e}")
+        log.critical(f"Result conversion error: {e}")
 
 
 def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
-    """从 Wallhaven API 检索待处理的图片 URL 列表。
+    """Retrieve a list of pending image URLs from the Wallhaven API.
     Args:
-        wallhaven_url: 查询图片数据的 URL。
+        wallhaven_url: URL to query image data.
 
     Returns:
-        list: 包含图片元数据(ID、分辨率、URL 和文件类型)的字典列表。
+        list: List of dictionaries containing image metadata (ID, resolution, URL, and file type).
     """
     # response_res = requests.get(wallhaven_url, proxies=proxies).content
     response_res = requests.get(url=wallhaven_url).content
     response_res_dict = handle_server_response(response_bytes=response_res)
     if not response_res_dict.get("data"):
-        log.critical("获取图片列表失败")
-        # raise Exception("获取图片列表失败")
+        log.critical("Failed to get image list")
+        # raise Exception("Failed to get image list")
     target_pics_list: list[TargetPic] = []
     for pic in response_res_dict.get("data"):
         target_pics_list.append(
@@ -735,7 +660,7 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
 
 
 def download_all_pics():
-    """从 Wallhaven 下载指定页面范围的所有图像。"""
+    """Downloads all images from Wallhaven for a specified page range."""
     global all
     pics = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
@@ -750,12 +675,12 @@ def download_all_pics():
                 num += 1
                 purity[pic[0].purity] += 1
         log.info(
-            f"下载第{page_num}页图片: {num:>2}/{len(pending_pic_list)} "
+            f"Download images on page {page_num}: {num:>2}/{len(pending_pic_list)} "
             f"{{sfw:{purity['sfw']:>2} / sketchy:{purity['sketchy']:>2} / nsfw:{purity['nsfw']:>2}}}"
         )
     all = len(pics)
     download(pics)
-    log.info("图片下载完成")
+    log.info("All images download completed")
 
 
 def wallhaven_download():
