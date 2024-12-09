@@ -1,17 +1,18 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.10.7
+Version: 0.11.0
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Sunday, 2024-12-08 16:37:28
+Last Modified: Monday, 2024-12-09 14:15:53
 Modified By: vanton
 -----
 Copyright  2021-2024
 License: MIT License
 """
 
+import argparse
 import asyncio
 import json
 import logging
@@ -29,6 +30,8 @@ from typing import Any
 import aiofiles
 import aiohttp
 import requests
+
+from APIKey import APIKey
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
@@ -42,8 +45,6 @@ from rich.progress import (
 )
 from rich.style import Style
 from rich.table import Column
-
-from APIKey import APIKey
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,7 @@ class Args:
         MAX_PAGE (int): Maximum pages to download
     """
 
-    categories: str = "111"
+    categories: str = "110"
     purity: str = "100"
     ai_art_filter: str = "0"
     sorting: str = "hot"
@@ -224,6 +225,69 @@ class Log:
 
 
 log = Log().logger
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Download wallpapers from Wallhaven.")
+    parser.add_argument(
+        "--categories",
+        "-c",
+        default=Args.categories,
+        help="爬取图片分类 General, Anime, People: 110 - General+Anime, 111 - General+Anime+People",
+    )
+    parser.add_argument(
+        "--purity",
+        "-p",
+        default=Args.purity,
+        help="图片纯度: 100 - sfw, 110 - sfw+sketchy, 111 - sfw+sketchy+nsfw",
+    )
+    parser.add_argument(
+        "--ai_art_filter",
+        "-a",
+        default=Args.ai_art_filter,
+        help="AI art filter: 0 - off, 1 - on",
+    )
+    parser.add_argument(
+        "--sorting",
+        "-s",
+        default=Args.sorting,
+        help="排序方式: hot, date_added, relevance, random, views, favorites, toplist",
+    )
+    parser.add_argument("--order", "-o", default=Args.order, help="排序顺序: desc, asc")
+    parser.add_argument(
+        "--topRange",
+        "-t",
+        default=Args.topRange,
+        help="toplist 排序范围: 1d, 3d, 1w, 1M, 3M, 6M, 1y",
+    )
+    parser.add_argument(
+        "--ratios",
+        "-r",
+        default=Args.ratios,
+        help="宽高比: 16x9, 16x10, landscape, portrait, square",
+    )
+    parser.add_argument(
+        "--atleast", "-l", default=Args.atleast, help="最小分辨率: 1920x1080"
+    )
+    parser.add_argument("--savePath", "-d", default=Args.SAVE_PATH, help="图片保存路径")
+    parser.add_argument(
+        "--maxPage", "-m", type=int, default=Args.MAX_PAGE, help="最大页数"
+    )
+    return parser.parse_args()
+
+
+def update_args_from_cli():
+    cli_args = parse_args()
+    Args.categories = cli_args.categories
+    Args.purity = cli_args.purity
+    Args.ai_art_filter = cli_args.ai_art_filter
+    Args.sorting = cli_args.sorting
+    Args.order = cli_args.order
+    Args.topRange = cli_args.topRange
+    Args.ratios = cli_args.ratios
+    Args.atleast = cli_args.atleast
+    Args.SAVE_PATH = cli_args.savePath
+    Args.MAX_PAGE = cli_args.maxPage
 
 
 def init_download():
@@ -695,6 +759,7 @@ def download_all_pics():
 
 
 def wallhaven_download():
+    update_args_from_cli()
     init_download()
     download_all_pics()
 
