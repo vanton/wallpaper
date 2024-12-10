@@ -5,7 +5,7 @@ Version: 0.12.1
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-12-10 12:52:13
+Last Modified: Tuesday, 2024-12-10 13:47:33
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -68,11 +68,13 @@ progress = AdvProgress(
     BarColumn(pulse_style=Style(color="gray50")),
     "[progress.percentage]{task.percentage:>3.1f}%",
     "•",
-    DownloadColumn(table_column=Column(justify="center")),
+    DownloadColumn(binary_units=True, table_column=Column(justify="center")),
     "•",
     TransferSpeedColumn(table_column=Column(justify="right")),
     "•",
-    TimeRemainingColumn(),
+    TimeRemainingColumn(
+        compact=True, elapsed_when_finished=True, table_column=Column(justify="right")
+    ),
     TextColumn(text_format="{task.description}"),
     # auto_refresh=False,
 )
