@@ -5,7 +5,7 @@ Version: 0.12.1
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-12-10 13:47:33
+Last Modified: Tuesday, 2024-12-10 14:14:54
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -32,6 +32,7 @@ import aiohttp
 import requests
 
 from configs import DEBUG, APIKey, Args, max_files
+from rich import filesize
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
@@ -254,20 +255,22 @@ def format_time(atime: float | None = None) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(atime))
 
 
-def format_size(size_bytes: float, suffix="B") -> str:
+def format_size(size_bytes: int, precision=2, separator=" ") -> str:
     """Convert file size in bytes to human readable format.
 
     Args:
         size_bytes: Size in bytes
 
     Returns:
-        str: Formatted size string (e.g. "1.23 MB")
+        str: Formatted size string (e.g. "1.23 MiB")
     """
-    for unit in ("", "K", "M", "G", "T", "P", "E", "Z"):
-        if size_bytes < 1024:
-            return f"{size_bytes:.2f} {unit}{suffix}"
-        size_bytes /= 1024
-    return f"{size_bytes:.2f} Y{suffix}"
+    return filesize._to_str(
+        size_bytes,
+        ("kiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"),
+        1024,
+        precision=precision,
+        separator=separator,
+    )
 
 
 @lru_cache(maxsize=128)
