@@ -5,7 +5,7 @@ Version: 0.12.1
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-12-10 14:14:54
+Last Modified: Tuesday, 2024-12-10 16:31:02
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -431,18 +431,12 @@ class DownloadTask:
     task_id: TaskID
     url: str
     path: Path
-    chunk_size: int = 64 * 1024  # 64KB chunks
-    # timeout: int = 60
+    chunk_size: int = 1024 * 64  # 64KB chunks
     headers: dict[str, str] | None = None
 
     def __post_init__(self):
         self.headers = self.headers or {"User-Agent": "Magic Browser"}
         self.path.parent.mkdir(parents=True, exist_ok=True)
-
-
-done_list: deque[TaskID] = deque()
-count = 0
-all = 0
 
 
 async def copy_url_async(task: DownloadTask) -> None | TaskID:
@@ -493,17 +487,21 @@ async def copy_url_async(task: DownloadTask) -> None | TaskID:
         return None
 
 
+completed_tasks: deque[TaskID] = deque()
+completed_task_count = 0
+total_tasks = 0
+
+
 def set_done(task_id: TaskID):
     """Mark a task as done and update the progress bar."""
-    global done_list, count, all
-    if task_id not in done_list:
-        done_list.append(task_id)
-        count += 1
-    _length = len(done_list)
+    global completed_tasks, completed_task_count, total_tasks
+    if task_id not in completed_tasks:
+        completed_tasks.append(task_id)
+        completed_task_count += 1
+    _length = len(completed_tasks)
     if (_length > window_height - 15 and _length > 10) or _length > 10:
-        progress.remove_task(done_list.popleft())  # cspell:words popleft
-
-    progress.set_title(f"Progress: {count}/{all}")
+        progress.remove_task(completed_tasks.popleft())  # cspell:words popleft
+    progress.set_title(f"Progress: {completed_task_count}/{total_tasks}")
 
 
 async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | None:
@@ -511,7 +509,9 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | N
     for attempt in range(max_retries):
         progress.update(task.task_id, visible=True)
         if attempt > 0:
-            await asyncio.sleep(2**attempt)  # Exponential backoff
+            await asyncio.sleep(
+                min(2**attempt, 60)
+            )  # Exponential backoff with max delay of 60 seconds
             log.warning(f"retry {attempt + 1}/{max_retries} for {task.url}")
             progress.reset(task_id=task.task_id, start=True)
             progress.update(task.task_id, description=f" {attempt + 1}/{max_retries}")
@@ -519,9 +519,9 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | N
         if result is not None:
             set_done(task_id=task.task_id)
             return result
-    remove_file(task.path)
+    if task.path.exists():
+        remove_file(task.path)
     progress.update(task.task_id, description="[red]")
-    # set_done(task_id=task.task_id)
     return None
 
 
@@ -672,7 +672,7 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
 
 def download_all_pics():
     """Downloads all images from Wallhaven for a specified page range."""
-    global all
+    global total_tasks
     pics = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
         wallhaven_url = wallhaven_url_base + str(page_num)
@@ -689,7 +689,7 @@ def download_all_pics():
             f"Download images on page {page_num}: {num:>2}/{len(pending_pic_list)} "
             f"{{sfw:{purity['sfw']:>2} / sketchy:{purity['sketchy']:>2} / nsfw:{purity['nsfw']:>2}}}"
         )
-    all = len(pics)
+    total_tasks = len(pics)
     download(pics)
     log.info("All images download completed")
 
