@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.12.0
+Version: 0.12.1
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-12-10 01:43:13
+Last Modified: Tuesday, 2024-12-10 12:52:13
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -30,6 +30,8 @@ from typing import Any
 import aiofiles
 import aiohttp
 import requests
+
+from configs import DEBUG, APIKey, Args, max_files
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
@@ -43,8 +45,6 @@ from rich.progress import (
 )
 from rich.style import Style
 from rich.table import Column
-
-from configs import DEBUG, APIKey, Args, max_files, wallhaven_url_base
 
 #!##############################################################################
 
@@ -221,6 +221,7 @@ def update_args_from_cli():
 
 def init_download():
     global wallhaven_url_base
+    wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
     # https://wallhaven.cc/search?categories=110&purity=100&sorting=hot&order=desc
     # sorting=toplist
     # sorting=hot
@@ -246,10 +247,12 @@ def format_time(atime: float | None = None) -> str:
     Returns:
         "YYYY-MM-DD HH:MM:SS"
     """
+    if atime is None:
+        atime = time.time()
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(atime))
 
 
-def format_size(size_bytes: int) -> str:
+def format_size(size_bytes: float, suffix="B") -> str:
     """Convert file size in bytes to human readable format.
 
     Args:
@@ -258,8 +261,11 @@ def format_size(size_bytes: int) -> str:
     Returns:
         str: Formatted size string (e.g. "1.23 MB")
     """
-    size_mb = size_bytes / (1024 * 1024)
-    return f"{round(size_mb, 2)} MB"
+    for unit in ("", "K", "M", "G", "T", "P", "E", "Z"):
+        if size_bytes < 1024:
+            return f"{size_bytes:.2f} {unit}{suffix}"
+        size_bytes /= 1024
+    return f"{size_bytes:.2f} Y{suffix}"
 
 
 @lru_cache(maxsize=128)
@@ -369,13 +375,13 @@ def clean_directory(
     try:
         files_info = []
         for file_path in directory.iterdir():
-            if file_path.is_file():
+            if file_path.is_file() and not file_path.name.startswith("."):
                 stat = file_path.stat()
                 timestamp = {
                     "created": stat.st_ctime,
                     "modified": stat.st_mtime,
                     "accessed": stat.st_atime,
-                }.get(sort_key, stat.st_ctime)
+                }.get(sort_key, stat.st_mtime)
 
                 files_info.append((file_path, timestamp))
     except Exception as e:

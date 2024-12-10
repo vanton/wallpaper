@@ -17,7 +17,7 @@ See our API documentation for more.
 """
 
 
-@dataclass(frozen=True)
+@dataclass
 class Args:
     """Please modify this parameter if necessary
 
@@ -80,9 +80,4 @@ Maximum number of files to retain, defaults to 24 *Args.MAX_PAGE + 4.
 -Theoretically, it is the number of max_files; if too many pictures are downloaded at one time, the pictures will be downloaded and then deleted repeatedly.
 -It is recommended that the number of saved pictures should be greater than the number of single pages *the number of downloaded pages.
 """
-wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
-pic_type_map = {
-    "image/png": "png",
-    "image/jpeg": "jpg",
-}
 DEBUG: bool = True
