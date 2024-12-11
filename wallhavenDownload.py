@@ -5,7 +5,7 @@ Version: 0.12.2
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Wednesday, 2024-12-11 20:02:22
+Last Modified: Wednesday, 2024-12-11 20:10:17
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -564,6 +564,10 @@ async def download_async(
         dest_dir: Destination directory
         max_concurrent: Maximum number of concurrent downloads
     """
+    if len(pics) == 0:
+        raise ValueError("No images to download")
+    if not Path(dest_dir).exists():
+        raise ValueError("Invalid destination directory")
     dest_path = Path(dest_dir)
     dest_path.mkdir(parents=True, exist_ok=True)
     semaphore = asyncio.Semaphore(max_concurrent)
