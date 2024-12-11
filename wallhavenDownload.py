@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.12.1
+Version: 0.12.2
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-12-10 16:31:02
+Last Modified: Wednesday, 2024-12-11 20:02:22
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -33,14 +33,18 @@ import requests
 
 from configs import DEBUG, APIKey, Args, max_files
 from rich import filesize
+from rich.console import Group
+from rich.live import Live
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     DownloadColumn,
+    MofNCompleteColumn,
     Progress,
     TaskID,
     TextColumn,
+    TimeElapsedColumn,
     TimeRemainingColumn,
     TransferSpeedColumn,
 )
@@ -83,6 +87,16 @@ console = progress.console
 """`logging` and `progress` output use the same `console` instance to prevent output conflicts"""
 window_width, window_height = console.size
 done_event = Event()
+
+total_progress = Progress(
+    TextColumn("[blue]Total Progress"),
+    BarColumn(),
+    MofNCompleteColumn(),
+    TextColumn("•"),
+    TimeElapsedColumn(),
+    TextColumn("•"),
+    TimeRemainingColumn(),
+)
 
 
 def handle_sigint(signum, frame):
@@ -491,6 +505,12 @@ completed_tasks: deque[TaskID] = deque()
 completed_task_count = 0
 total_tasks = 0
 
+group = Group(
+    progress,
+    total_progress,
+)
+live = Live(group)
+
 
 def set_done(task_id: TaskID):
     """Mark a task as done and update the progress bar."""
@@ -572,11 +592,18 @@ async def download_async(
         for pic, again in pics
     ]
 
+    total_task_id = total_progress.add_task(
+        description="Total Progress", total=len(download_tasks)
+    )
+
     async def bounded_download(task: DownloadTask) -> TaskID | None:
         async with semaphore:
-            return await download_with_retries(task=task)
+            result = await download_with_retries(task=task)
+            if result is not None:
+                total_progress.update(total_task_id, advance=1)
+            return result
 
-    with progress:
+    with live:
         results = await asyncio.gather(
             *(bounded_download(task) for task in download_tasks),
             return_exceptions=True,
