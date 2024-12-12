@@ -69,6 +69,12 @@ Change the relevant parameters in `configs.py`, and it can be used normally with
 ### `configs.py`:
 
 ```
+打开以下页面获取APIKey。必须先登录。
+APIKey 可以为空, 为空时 NSFW 内容无法下载。
+Open the following page to obtain the APIKey. Must log in first.
+APIKey can be empty, and NSFW content cannot be downloaded when it is empty.
+https://wallhaven.cc/settings/account
+
 # Fill in your APIKey
 APIKey = ""
 # Your API key can be used to grant other apps access to some of your account settings.
