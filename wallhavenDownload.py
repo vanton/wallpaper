@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.12.2
+Version: 0.12.3
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Wednesday, 2024-12-11 20:10:17
+Last Modified: Thursday, 2024-12-12 16:07:31
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -154,7 +154,7 @@ class Log:
         rich_handler.setFormatter(logging.Formatter("%(message)s"))
 
         logging.basicConfig(
-            level=logging.NOTSET,
+            level=logging.INFO,
             format="%(message)s",
             datefmt="[%X]",
             handlers=[rich_handler, handler],
@@ -250,7 +250,9 @@ def init_download():
         f"apikey={APIKey}&categories={Args.categories}&order=desc&topRange={Args.topRange}&atleast={Args.atleast}"
         f"&sorting={Args.sorting}&ratios={Args.ratios}&purity={Args.purity}&ai_art_filter={Args.ai_art_filter}&page="
     )
-    log.info(wallhaven_url_base.split("&", 1)[1])
+    # !! for safety, remove the API key from the log
+    safe_url = wallhaven_url_base.replace(f"apikey={APIKey}&", "apikey=********&")
+    log.info(safe_url)
     # log.info(wallhaven_url_base)
     # Create file saving directory
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
@@ -732,8 +734,7 @@ def wallhaven_download():
 
 
 if __name__ == "__main__":
-    _sep = "-" * 8
-    log.info(f"{_sep} START {_sep} >>> {format_time()}")
+    log.info(f"[{format_time()}] - {' START ':=^32}")
     wallhaven_download()
     clean_directory()
-    log.info(f"{_sep}  END  {_sep} >>> {format_time()}\n")
+    log.info(f"[{format_time()}] - {'  END  ':=^32}\n")
