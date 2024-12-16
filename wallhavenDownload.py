@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.12.4
+Version: 0.12.5
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Monday, 2024-12-16 21:53:23
+Last Modified: Monday, 2024-12-16 22:19:12
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -361,7 +361,7 @@ def get_dir_info(path: str | Path) -> dict:
         return {"exists": True, "is_dir": False, "size": 0, "file_count": 0}
 
     size_bytes = calculate_dir_size(path)
-    file_count = sum(1 for _ in path.rglob("*") if _.is_file())
+    file_count = sum(1 for _ in path.rglob("[!.]*") if _.is_file())
 
     info = {
         "exists": True,
@@ -370,8 +370,6 @@ def get_dir_info(path: str | Path) -> dict:
         "size_formatted": format_size(size_bytes),
         "file_count": file_count,
     }
-
-    log.info(f"Directory {path}: {info['size_formatted']}, {info['file_count']} files")
     return info
 
 
@@ -403,7 +401,7 @@ def remove_file(file_path: str | Path) -> bool:
 
 
 def clean_directory(
-    directory=Args.SAVE_PATH, max_files=max_files, sort_key: str = "created"
+    directory=Args.SAVE_PATH, max_files=max_files, sort_key: str = "modified"
 ) -> dict:
     """Clean directory by removing oldest files while keeping specified number of newest files.
 
@@ -415,6 +413,7 @@ def clean_directory(
     Returns:
         dict: Summary of cleaning operation
     """
+    log.info(f"Keeping {max_files} newest files")
     directory = Path(directory)
     if not directory.exists():
         log.error(f"Directory does not exist: {directory}")
@@ -434,7 +433,7 @@ def clean_directory(
                     "created": stat.st_ctime,
                     "modified": stat.st_mtime,
                     "accessed": stat.st_atime,
-                }.get(sort_key, stat.st_mtime)
+                }.get(sort_key, stat.st_ctime)
 
                 files_info.append((file_path, timestamp))
     except Exception as e:
@@ -737,7 +736,8 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
 
 def download_all_pics():
     """Downloads all images from Wallhaven for a specified page range."""
-    global total_tasks
+    global total_tasks, max_files
+    _files_count = 0
     pics = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
         wallhaven_url = wallhaven_url_base + str(page_num)
@@ -754,6 +754,8 @@ def download_all_pics():
             f"Download images on page {page_num}: {num:>2}/{len(pending_pic_list)} "
             f"{{sfw:{purity['sfw']:>2} / sketchy:{purity['sketchy']:>2} / nsfw:{purity['nsfw']:>2}}}"
         )
+        _files_count += len(pending_pic_list)
+    max_files = max_files if max_files > _files_count else _files_count
     total_tasks = len(pics)
     download(pics)
     log.info("All images download completed")
@@ -768,5 +770,5 @@ def wallhaven_download():
 if __name__ == "__main__":
     log.info(f"{' START ':=^64}")
     wallhaven_download()
-    clean_directory()
+    clean_directory(directory=Args.SAVE_PATH, max_files=max_files)
     log.info(f"{'  END  ':=^64}\n")
