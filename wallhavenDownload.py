@@ -5,7 +5,7 @@ Version: 0.12.5
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Monday, 2024-12-16 22:19:12
+Last Modified: Monday, 2024-12-16 22:25:22
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -137,9 +137,8 @@ class Log:
 
         # Rename backup log files from "log.log.2021-11-06" to "log.2021-11-06.log"
         def custom_namer(default_name: str) -> str:
-            now = time.strftime("%Y%m%d_%H%M", time.localtime())
             base_filename, ext, date = default_name.split(".")
-            return f"{base_filename}.{now}.{ext}"
+            return f"{base_filename}.{date}.{ext}"
 
         def replace_in_tuple(tup, old_value, new_value):
             new_tuple = []
