@@ -1,12 +1,12 @@
 !.keep
 .venv
 __pycache__
-APIKey.py
 async_progress.py
 log/*.*
 Pic/*.*
 rich/**
 stackoverflow/**
 tmp/**
-test.*
+test*.py
+test*.bat
 configs.py

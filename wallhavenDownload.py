@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.12.3
+Version: 0.12.4
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Thursday, 2024-12-12 16:07:31
+Last Modified: Monday, 2024-12-16 21:53:23
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -20,6 +20,7 @@ import os
 import signal
 import time
 from collections import deque
+from copy import copy
 from dataclasses import dataclass
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
@@ -78,9 +79,11 @@ progress = AdvProgress(
     TransferSpeedColumn(table_column=Column(justify="right")),
     "•",
     TimeRemainingColumn(
-        compact=True, elapsed_when_finished=True, table_column=Column(justify="right")
+        compact=True,
+        elapsed_when_finished=True,
+        table_column=Column(justify="right"),
     ),
-    TextColumn(text_format="{task.description}"),
+    "{task.description}",
     # auto_refresh=False,
 )
 console = progress.console
@@ -90,12 +93,13 @@ done_event = Event()
 
 total_progress = Progress(
     TextColumn("[blue]Total Progress"),
-    BarColumn(),
+    BarColumn(bar_width=None),
     MofNCompleteColumn(),
-    TextColumn("•"),
+    "•",
     TimeElapsedColumn(),
-    TextColumn("•"),
+    "•",
     TimeRemainingColumn(),
+    expand=True,
 )
 
 
@@ -120,7 +124,7 @@ class Log:
     def __init__(
         self,
         logPath="./log/wallhavenDownload.log",
-        when="D",  # Rotate logs by day (This parameter is not used yet)
+        # when="D",  # Rotate logs by day (This parameter is not used yet)
         maxBytes=1024 * 64,  # Rotation log size
         backupCount=5,  # Number of log files to keep
     ):
@@ -133,30 +137,61 @@ class Log:
 
         # Rename backup log files from "log.log.2021-11-06" to "log.2021-11-06.log"
         def custom_namer(default_name: str) -> str:
+            now = time.strftime("%Y%m%d_%H%M", time.localtime())
             base_filename, ext, date = default_name.split(".")
-            return f"{base_filename}.{date}.{ext}"
+            return f"{base_filename}.{now}.{ext}"
+
+        def replace_in_tuple(tup, old_value, new_value):
+            new_tuple = []
+            for item in tup:
+                if isinstance(item, str) and old_value in item:
+                    new_tuple.append(item.replace(old_value, new_value))
+                else:
+                    new_tuple.append(item)
+            return tuple(new_tuple)
+
+        # !! for safety, remove the API key from the log
+        class CustomFormatter(logging.Formatter):
+            def format(self, record):
+                _record = copy(record)
+                if len(APIKey) > 0:
+                    _record.msg = _record.msg.replace(APIKey, "***")
+                    if _record.args and len(_record.args) > 0:
+                        _record.args = replace_in_tuple(_record.args, APIKey, "***")
+                return super().format(_record)
 
         log_level = logging.DEBUG if DEBUG else logging.INFO
         # handler = TimedRotatingFileHandler(
         #     logPath, when=when, backupCount=backupCount, encoding="UTF-8"
         # )
         handler = RotatingFileHandler(
-            logPath, maxBytes=maxBytes, backupCount=backupCount, encoding="UTF-8"
+            filename=logPath,
+            maxBytes=maxBytes,
+            backupCount=backupCount,
+            encoding="UTF-8",
         )
-        handler.setLevel(log_level)
         handler.setFormatter(
-            logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+            CustomFormatter(
+                fmt="%(asctime)s - [%(levelname)s] - %(message)s - %(funcName)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
         )
         handler.namer = custom_namer
 
-        rich_handler = RichHandler(console=console)
-        rich_handler.setLevel(logging.INFO)
-        rich_handler.setFormatter(logging.Formatter("%(message)s"))
+        rich_handler = RichHandler(
+            level=logging.INFO,
+            console=console,
+            show_time=False,
+            rich_tracebacks=True,
+        )
+        rich_handler.setFormatter(
+            CustomFormatter(
+                fmt="%(message)s",
+            )
+        )
 
         logging.basicConfig(
-            level=logging.INFO,
-            format="%(message)s",
-            datefmt="[%X]",
+            level=log_level,
             handlers=[rich_handler, handler],
         )
         self.logger = logging.getLogger(__name__)
@@ -250,10 +285,7 @@ def init_download():
         f"apikey={APIKey}&categories={Args.categories}&order=desc&topRange={Args.topRange}&atleast={Args.atleast}"
         f"&sorting={Args.sorting}&ratios={Args.ratios}&purity={Args.purity}&ai_art_filter={Args.ai_art_filter}&page="
     )
-    # !! for safety, remove the API key from the log
-    safe_url = wallhaven_url_base.replace(f"apikey={APIKey}&", "apikey=********&")
-    log.info(safe_url)
-    # log.info(wallhaven_url_base)
+    log.info(wallhaven_url_base)
     # Create file saving directory
     os.makedirs(Args.SAVE_PATH, exist_ok=True)
 
@@ -734,7 +766,7 @@ def wallhaven_download():
 
 
 if __name__ == "__main__":
-    log.info(f"[{format_time()}] - {' START ':=^32}")
+    log.info(f"{' START ':=^64}")
     wallhaven_download()
     clean_directory()
-    log.info(f"[{format_time()}] - {'  END  ':=^32}\n")
+    log.info(f"{'  END  ':=^64}\n")
