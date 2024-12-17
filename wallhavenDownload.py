@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.12.5
+Version: 0.12.6
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Monday, 2024-12-16 22:25:22
+Last Modified: Tuesday, 2024-12-17 22:38:36
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -121,61 +121,76 @@ class Log:
         self.logger: same as :class:`logging.Logger`
     """
 
+    DEFAULT_LOG_PATH = "./log/wallhavenDownload.log"
+    DEFAULT_MAX_BYTES = 1024 * 64  # 64kB
+    DEFAULT_BACKUP_COUNT = 5
+    DEFAULT_LOG_FORMAT = (
+        "%(asctime)s - [%(levelname)s] - %(message)s - [%(funcName)s]:%(lineno)d"
+    )
+    DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+    # !! for safety, remove the API key from the log
+    class CustomFormatter(logging.Formatter):
+        def __init__(self, fmt=None, datefmt=None, api_key=""):
+            super().__init__(fmt=fmt, datefmt=datefmt)
+            self.api_key = api_key
+
+        def format(self, record):
+            _record = copy(record)
+            if self.api_key:
+                _record.msg = _record.msg.replace(self.api_key, "***")
+                if _record.args and len(_record.args) > 0:
+                    _record.args = Log.replace_in_tuple(
+                        _record.args, self.api_key, "***"
+                    )
+            return super().format(_record)
+
+    # Rename backup log files from "log.log.2021-11-06" to "log.2021-11-06.log"
+    @staticmethod
+    def custom_namer(default_name: str) -> str:
+        base_filename, ext, date = default_name.split(".")
+        return f"{base_filename}.{date}.{ext}"
+
+    @staticmethod
+    def replace_in_tuple(tup, old_value, new_value):
+        return tuple(
+            item.replace(old_value, new_value)
+            if isinstance(item, str) and old_value in item
+            else item
+            for item in tup
+        )
+
     def __init__(
         self,
-        logPath="./log/wallhavenDownload.log",
+        logPath=DEFAULT_LOG_PATH,
         # when="D",  # Rotate logs by day (This parameter is not used yet)
-        maxBytes=1024 * 64,  # Rotation log size
-        backupCount=5,  # Number of log files to keep
+        maxBytes=DEFAULT_MAX_BYTES,
+        backupCount=DEFAULT_BACKUP_COUNT,
     ):
-        # Create file if it does not exist
-        if not os.path.exists(os.path.dirname(logPath)):
-            os.makedirs(os.path.dirname(logPath))
-        if not os.path.exists(logPath):
-            with open(logPath, "w", encoding="UTF-8") as f:
-                f.write("")
-
-        # Rename backup log files from "log.log.2021-11-06" to "log.2021-11-06.log"
-        def custom_namer(default_name: str) -> str:
-            base_filename, ext, date = default_name.split(".")
-            return f"{base_filename}.{date}.{ext}"
-
-        def replace_in_tuple(tup, old_value, new_value):
-            new_tuple = []
-            for item in tup:
-                if isinstance(item, str) and old_value in item:
-                    new_tuple.append(item.replace(old_value, new_value))
-                else:
-                    new_tuple.append(item)
-            return tuple(new_tuple)
-
-        # !! for safety, remove the API key from the log
-        class CustomFormatter(logging.Formatter):
-            def format(self, record):
-                _record = copy(record)
-                if len(APIKey) > 0:
-                    _record.msg = _record.msg.replace(APIKey, "***")
-                    if _record.args and len(_record.args) > 0:
-                        _record.args = replace_in_tuple(_record.args, APIKey, "***")
-                return super().format(_record)
+        log_path = Path(logPath)
+        log_path.parent.mkdir(
+            parents=True, exist_ok=True
+        )  # Create dir if it does not exist
+        log_path.touch(exist_ok=True)  # Create file if it does not exist
 
         log_level = logging.DEBUG if DEBUG else logging.INFO
         # handler = TimedRotatingFileHandler(
         #     logPath, when=when, backupCount=backupCount, encoding="UTF-8"
         # )
-        handler = RotatingFileHandler(
-            filename=logPath,
+        file_handler = RotatingFileHandler(
+            filename=str(log_path),
             maxBytes=maxBytes,
             backupCount=backupCount,
             encoding="UTF-8",
         )
-        handler.setFormatter(
-            CustomFormatter(
-                fmt="%(asctime)s - [%(levelname)s] - %(message)s - %(funcName)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
+        file_handler.setFormatter(
+            self.CustomFormatter(
+                fmt=self.DEFAULT_LOG_FORMAT,
+                datefmt=self.DEFAULT_DATE_FORMAT,
+                api_key=APIKey,
             )
         )
-        handler.namer = custom_namer
+        file_handler.namer = self.custom_namer
 
         rich_handler = RichHandler(
             level=logging.INFO,
@@ -184,16 +199,16 @@ class Log:
             rich_tracebacks=True,
         )
         rich_handler.setFormatter(
-            CustomFormatter(
+            self.CustomFormatter(
                 fmt="%(message)s",
+                api_key=APIKey,
             )
         )
 
-        logging.basicConfig(
-            level=log_level,
-            handlers=[rich_handler, handler],
-        )
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger()
+        self.logger.setLevel(log_level)
+        self.logger.addHandler(rich_handler)
+        self.logger.addHandler(file_handler)
 
 
 log = Log().logger
@@ -676,13 +691,13 @@ def download_one_pic(target_pic: TargetPic) -> None | tuple[TargetPic, bool]:
     if os.path.isfile(pic_path):
         file_info = os.stat(pic_path)
         log.debug(
-            f"Image already exists: <{filename}> <{format_size(file_info.st_size)}> <{format_time(file_info.st_atime)}>"
+            f"Image already exists: {filename} [{format_size(file_info.st_size):>12}] {format_time(file_info.st_atime)}"
         )
         if file_info.st_size == filesize:
             return None
         else:
             log.debug(
-                f"Image is incomplete, download again: <{filename}> <{file_info.st_size} -> {filesize}>"
+                f"Image is incomplete, download again: {filename} <{file_info.st_size} -> {filesize}>"
             )
             again = True
     return target_pic, again
