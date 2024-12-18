@@ -1,11 +1,11 @@
 :: ================
 :: File: \start.bat
 :: Project: wallpaper
-:: Version: 0.11.1
+:: Version: 0.12.7
 :: File Created: Saturday, 2024-11-23 13:54:47
 :: Author: vanton
 :: -----
-:: Last Modified: Monday, 2024-12-09 15:02:39
+:: Last Modified: Wednesday, 2024-12-18 19:03:09
 :: Modified By: vanton
 :: -----
 :: Copyright  2024
