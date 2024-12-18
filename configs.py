@@ -46,8 +46,10 @@ class Args:
     ratios: str = "landscape"
     atleast: str = "1000x1000"
 
+    MAX_PAGE: int = 2
     SAVE_PATH: str = "./Pic"
-    MAX_PAGE: int = 4
+    DOWNLOADING_PATH: str = "./downloading"
+    LOG_PATH: str = "./log"
 
 
 """
@@ -74,7 +76,7 @@ Maximum number of pages, default 4
 # 其他配置，非必要不要修改
 # Other configurations should not be modified unless necessary.
 
-max_files: int = 24 * Args.MAX_PAGE + 10
+max_files: int = 24 * Args.MAX_PAGE
 """max_files (int):
 Maximum number of files to retain, defaults to 24 *Args.MAX_PAGE + 4.
 -Theoretically, it is the number of max_files; if too many pictures are downloaded at one time, the pictures will be downloaded and then deleted repeatedly.

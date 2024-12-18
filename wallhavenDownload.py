@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.12.6
+Version: 0.12.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Tuesday, 2024-12-17 22:38:36
+Last Modified: Wednesday, 2024-12-18 10:40:40
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -16,7 +16,7 @@ import argparse
 import asyncio
 import json
 import logging
-import os
+import shutil
 import signal
 import time
 from collections import deque
@@ -121,7 +121,7 @@ class Log:
         self.logger: same as :class:`logging.Logger`
     """
 
-    DEFAULT_LOG_PATH = "./log/wallhavenDownload.log"
+    DEFAULT_LOG_PATH = Path(Args.LOG_PATH).joinpath("wallhavenDownload.log")
     DEFAULT_MAX_BYTES = 1024 * 64  # 64kB
     DEFAULT_BACKUP_COUNT = 5
     DEFAULT_LOG_FORMAT = (
@@ -168,10 +168,8 @@ class Log:
         backupCount=DEFAULT_BACKUP_COUNT,
     ):
         log_path = Path(logPath)
-        log_path.parent.mkdir(
-            parents=True, exist_ok=True
-        )  # Create dir if it does not exist
-        log_path.touch(exist_ok=True)  # Create file if it does not exist
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.touch(exist_ok=True)
 
         log_level = logging.DEBUG if DEBUG else logging.INFO
         # handler = TimedRotatingFileHandler(
@@ -301,7 +299,8 @@ def init_download():
     )
     log.info(wallhaven_url_base)
     # Create file saving directory
-    os.makedirs(Args.SAVE_PATH, exist_ok=True)
+    Path(Args.SAVE_PATH).mkdir(parents=True, exist_ok=True)
+    Path(Args.DOWNLOADING_PATH).mkdir(parents=True, exist_ok=True)
 
 
 def format_time(atime: float | None = None) -> str:
@@ -350,7 +349,11 @@ def calculate_dir_size(path: str | Path) -> int:
         return 0
 
     try:
-        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+        return sum(
+            f.stat().st_size
+            for f in path.iterdir()
+            if f.is_file() and not f.name.startswith(".")
+        )
     except Exception as e:
         log.error(f"Error calculating directory size for {path}: {e}")
         return 0
@@ -375,7 +378,9 @@ def get_dir_info(path: str | Path) -> dict:
         return {"exists": True, "is_dir": False, "size": 0, "file_count": 0}
 
     size_bytes = calculate_dir_size(path)
-    file_count = sum(1 for _ in path.rglob("[!.]*") if _.is_file())
+    file_count = sum(
+        1 for _ in path.iterdir() if _.is_file() and not _.name.startswith(".")
+    )
 
     info = {
         "exists": True,
@@ -427,7 +432,7 @@ def clean_directory(
     Returns:
         dict: Summary of cleaning operation
     """
-    log.info(f"Keeping {max_files} newest files")
+    log.info(f"Keeping {max_files} newest files in directory: {directory}")
     directory = Path(directory)
     if not directory.exists():
         log.error(f"Directory does not exist: {directory}")
@@ -477,6 +482,7 @@ def clean_directory(
         "success": errors == 0,
         "files_removed": removed_count,
         "errors": errors,
+        "directory": directory,
         "remaining_files": final_info["file_count"],
         "final_size": final_info["size_formatted"],
     }
@@ -492,6 +498,7 @@ class DownloadTask:
     task_id: TaskID
     url: str
     path: Path
+    downloading: Path
     chunk_size: int = 1024 * 64  # 64KB chunks
     headers: dict[str, str] | None = None
 
@@ -517,22 +524,23 @@ async def copy_url_async(task: DownloadTask) -> None | TaskID:
                     return None
                 total_size = int(response.headers.get("Content-Length", 0))
                 progress.update(task_id=task.task_id, total=total_size)
-                async with aiofiles.open(task.path, "wb") as dest_file:
+                async with aiofiles.open(task.downloading, "wb") as downloading_file:
                     progress.start_task(task.task_id)
                     downloaded = 0
                     async for chunk in response.content.iter_chunked(task.chunk_size):
                         if done_event.is_set():
-                            return task.task_id
-                        await dest_file.write(chunk)
+                            return None
+                        await downloading_file.write(chunk)
                         downloaded += len(chunk)
                         progress.update(task.task_id, advance=len(chunk))
                     if downloaded == total_size:
                         progress.update(task.task_id, description="[green]")
-                        return task.task_id
                     else:
                         log.warning(f"Incomplete download for {task.url}")
                         progress.update(task.task_id, description="[red]")
                         return None
+                shutil.move(task.downloading, task.path)
+                return task.task_id
     except KeyboardInterrupt:
         log.info("Download interrupted by user")
         done_event.set()
@@ -574,6 +582,8 @@ def set_done(task_id: TaskID):
 async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | None:
     """Attempt to download with retries on failure"""
     for attempt in range(max_retries):
+        if done_event.is_set():
+            return None
         progress.update(task.task_id, visible=True)
         if attempt > 0:
             await asyncio.sleep(
@@ -586,8 +596,8 @@ async def download_with_retries(task: DownloadTask, max_retries=3) -> TaskID | N
         if result is not None:
             set_done(task_id=task.task_id)
             return result
-    if task.path.exists():
-        remove_file(task.path)
+    # if task.path.exists():
+    #     remove_file(task.path)
     progress.update(task.task_id, description="[red]")
     return None
 
@@ -603,7 +613,10 @@ class TargetPic:
 
 
 async def download_async(
-    pics: list[tuple[TargetPic, bool]], dest_dir=Args.SAVE_PATH, max_concurrent=5
+    pics: list[TargetPic],
+    dest_dir=Args.SAVE_PATH,
+    downloading_dir=Args.DOWNLOADING_PATH,
+    max_concurrent=5,
 ):
     """Download multiple files concurrently to the given directory.
     Args:
@@ -616,13 +629,13 @@ async def download_async(
     if not Path(dest_dir).exists():
         raise ValueError("Invalid destination directory")
     dest_path = Path(dest_dir)
-    dest_path.mkdir(parents=True, exist_ok=True)
+    downloading_path = Path(downloading_dir)
     semaphore = asyncio.Semaphore(max_concurrent)
     # Pre-process all tasks
     download_tasks = [
         DownloadTask(
             task_id=progress.add_task(
-                description="" if not again else "",
+                description="",
                 filename=pic.path.split("/")[-1],
                 colors="".join(f"[{color}]██" for color in pic.colors),
                 purity=(
@@ -639,8 +652,9 @@ async def download_async(
             ),
             url=pic.path,
             path=dest_path / pic.path.split("/")[-1],
+            downloading=downloading_path / pic.path.split("/")[-1],
         )
-        for pic, again in pics
+        for pic in pics
     ]
 
     total_task_id = total_progress.add_task(
@@ -660,12 +674,12 @@ async def download_async(
             return_exceptions=True,
         )
         # Handle exceptions
-        for (pic, _), result in zip(pics, results):
+        for pic, result in zip(pics, results):
             if isinstance(result, Exception):
                 log.error(f"Failed to download {pic}: {result}")
 
 
-def download(pics: list[tuple[TargetPic, bool]], dest_dir=Args.SAVE_PATH):
+def download(pics: list[TargetPic], dest_dir=Args.SAVE_PATH):
     """Entry point for downloads - runs async code in event loop"""
     try:
         asyncio.run(download_async(pics, dest_dir))
@@ -677,30 +691,22 @@ def download(pics: list[tuple[TargetPic, bool]], dest_dir=Args.SAVE_PATH):
         done_event.set()
 
 
-def download_one_pic(target_pic: TargetPic) -> None | tuple[TargetPic, bool]:
+def download_one_pic(target_pic: TargetPic) -> None | TargetPic:
     """
     Args:
         target_pic:
     """
     url = target_pic.path
     filename = url.split("/")[-1]
-    filesize = target_pic.file_size
-    pic_path = f"{Args.SAVE_PATH}/{filename}"
+    pic_path = Path(Args.SAVE_PATH).joinpath(filename)
     # log.debug(f"<{pic_id}> <{resolution}> {url}")
-    again = False
-    if os.path.isfile(pic_path):
-        file_info = os.stat(pic_path)
-        log.debug(
-            f"Image already exists: {filename} [{format_size(file_info.st_size):>12}] {format_time(file_info.st_atime)}"
-        )
-        if file_info.st_size == filesize:
-            return None
-        else:
-            log.debug(
-                f"Image is incomplete, download again: {filename} <{file_info.st_size} -> {filesize}>"
-            )
-            again = True
-    return target_pic, again
+    if Path(pic_path).exists():
+        # file_info = Path(pic_path).stat()
+        # log.debug(
+        #     f"Image already exists: {filename} [{format_size(file_info.st_size):>12}] {format_time(file_info.st_atime)}"
+        # )
+        return None
+    return target_pic
 
 
 def handle_server_response(response_bytes) -> Any:
@@ -761,15 +767,17 @@ def download_all_pics():
         for target_pic in pending_pic_list:
             pic = download_one_pic(target_pic)
             if pic:
+                log.debug(f"Download image: {pic.path}")
                 pics.append(pic)
                 num += 1
-                purity[pic[0].purity] += 1
+                purity[pic.purity] += 1
         log.info(
             f"Download images on page {page_num}: {num:>2}/{len(pending_pic_list)} "
             f"{{sfw:{purity['sfw']:>2} / sketchy:{purity['sketchy']:>2} / nsfw:{purity['nsfw']:>2}}}"
         )
         _files_count += len(pending_pic_list)
     max_files = max_files if max_files > _files_count else _files_count
+    max_files += 10
     total_tasks = len(pics)
     download(pics)
     log.info("All images download completed")
@@ -785,4 +793,5 @@ if __name__ == "__main__":
     log.info(f"{' START ':=^64}")
     wallhaven_download()
     clean_directory(directory=Args.SAVE_PATH, max_files=max_files)
+    clean_directory(directory=Args.DOWNLOADING_PATH, max_files=10)
     log.info(f"{'  END  ':=^64}\n")
