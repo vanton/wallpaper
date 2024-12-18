@@ -5,7 +5,7 @@ Version: 0.12.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Wednesday, 2024-12-18 10:40:40
+Last Modified: Wednesday, 2024-12-18 18:51:11
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -18,15 +18,14 @@ import json
 import logging
 import shutil
 import signal
-import time
 from collections import deque
 from copy import copy
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Event
-from typing import Any
 
 import aiofiles
 import aiohttp
@@ -283,8 +282,7 @@ def update_args_from_cli():
     Args.MAX_PAGE = cli_args.maxPage
 
 
-def init_download():
-    global wallhaven_url_base
+def init_download() -> str:
     wallhaven_url_base = "https://wallhaven.cc/api/v1/search?"
     # https://wallhaven.cc/search?categories=110&purity=100&sorting=hot&order=desc
     # sorting=toplist
@@ -301,9 +299,10 @@ def init_download():
     # Create file saving directory
     Path(Args.SAVE_PATH).mkdir(parents=True, exist_ok=True)
     Path(Args.DOWNLOADING_PATH).mkdir(parents=True, exist_ok=True)
+    return wallhaven_url_base
 
 
-def format_time(atime: float | None = None) -> str:
+def format_time(atime: float | None) -> str:
     """Format time
     Args:
         atime: Timestamp seconds, or None to format the current time.
@@ -311,9 +310,8 @@ def format_time(atime: float | None = None) -> str:
     Returns:
         "YYYY-MM-DD HH:MM:SS"
     """
-    if atime is None:
-        atime = time.time()
-    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(atime))
+    atime = atime or datetime.now().timestamp()
+    return datetime.fromtimestamp(atime).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def format_size(size_bytes: int, precision=2, separator=" ") -> str:
@@ -420,7 +418,7 @@ def remove_file(file_path: str | Path) -> bool:
 
 
 def clean_directory(
-    directory=Args.SAVE_PATH, max_files=max_files, sort_key: str = "modified"
+    directory=Args.SAVE_PATH, max_files: int = max_files, sort_key: str = "modified"
 ) -> dict:
     """Clean directory by removing oldest files while keeping specified number of newest files.
 
@@ -619,10 +617,15 @@ async def download_async(
     max_concurrent=5,
 ):
     """Download multiple files concurrently to the given directory.
+
     Args:
-        urls: Iterable of URLs to download
-        dest_dir: Destination directory
-        max_concurrent: Maximum number of concurrent downloads
+        pics: List of TargetPic objects to download.
+        dest_dir: Destination directory.
+        downloading_dir: Directory to save files while downloading.
+        max_concurrent: Maximum number of concurrent downloads.
+
+    Raises:
+        ValueError: If no images to download or invalid destination directory.
     """
     if len(pics) == 0:
         raise ValueError("No images to download")
@@ -709,7 +712,7 @@ def download_one_pic(target_pic: TargetPic) -> None | TargetPic:
     return target_pic
 
 
-def handle_server_response(response_bytes) -> Any:
+def handle_server_response(response_bytes) -> dict | None:
     """Handle responses from the server.
     Args:
         response_bytes: Bytes of data returned by the server.
@@ -723,6 +726,7 @@ def handle_server_response(response_bytes) -> Any:
         return response_dict
     except json.JSONDecodeError as e:
         log.critical(f"Result conversion error: {e}")
+        return None
 
 
 def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
@@ -736,11 +740,15 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
     # response_res = requests.get(wallhaven_url, proxies=proxies).content
     response_res = requests.get(url=wallhaven_url).content
     response_res_dict = handle_server_response(response_bytes=response_res)
-    if not response_res_dict.get("data"):
+    if response_res_dict is None:
         log.critical("Failed to get image list")
-        # raise Exception("Failed to get image list")
+        raise Exception("Failed to get image list")
+    data = response_res_dict.get("data")
+    if data is None:
+        log.critical("Failed to get image list")
+        raise Exception("Failed to get image list")
     target_pics_list: list[TargetPic] = []
-    for pic in response_res_dict.get("data"):
+    for pic in data:
         target_pics_list.append(
             TargetPic(
                 id=pic.get("id"),
@@ -754,13 +762,13 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
     return target_pics_list
 
 
-def download_all_pics():
+def download_all_pics(wallhaven_url):
     """Downloads all images from Wallhaven for a specified page range."""
     global total_tasks, max_files
     _files_count = 0
     pics = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
-        wallhaven_url = wallhaven_url_base + str(page_num)
+        wallhaven_url = wallhaven_url + str(page_num)
         pending_pic_list = get_pending_pic_url(wallhaven_url)
         num = 0
         purity = {"sfw": 0, "sketchy": 0, "nsfw": 0}
@@ -785,8 +793,8 @@ def download_all_pics():
 
 def wallhaven_download():
     update_args_from_cli()
-    init_download()
-    download_all_pics()
+    wallhaven_url = init_download()
+    download_all_pics(wallhaven_url)
 
 
 if __name__ == "__main__":
