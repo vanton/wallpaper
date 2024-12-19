@@ -16,7 +16,6 @@ This project is a wallpaper downloader for [wallhaven.cc](https://wallhaven.cc).
 - Python 3.10+
 - `aiofiles`
 - `aiohttp`
-- `asyncio`
 - `requests`
 - `rich`
 
