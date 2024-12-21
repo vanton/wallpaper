@@ -1,11 +1,11 @@
 r"""
 File: \wallhavenDownload.py
 Project: wallpaper
-Version: 0.12.7
+Version: 0.12.8
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Saturday, 2024-12-21 21:11:27
+Last Modified: Saturday, 2024-12-21 21:46:17
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -525,7 +525,7 @@ async def copy_url_async(task: DownloadTask) -> None | TaskID:
                 async with aiofiles.open(task.downloading, "wb") as downloading_file:
                     progress.start_task(task.task_id)
                     downloaded = 0
-                    async for chunk in response.content.iter_chunked(task.chunk_size):
+                    async for chunk in response.content.iter_any():
                         if done_event.is_set():
                             return None
                         await downloading_file.write(chunk)
@@ -766,11 +766,11 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
     err_msg = "Failed to get image list"
     if response_res_dict is None or "data" not in response_res_dict:
         log.critical(err_msg)
-        raise Exception(err_msg)
+        raise RuntimeError(err_msg)
     data = response_res_dict.get("data")
     if data is None:
         log.critical(err_msg)
-        raise Exception(err_msg)
+        raise RuntimeError(err_msg)
     return [
         TargetPic(
             id=pic.get("id"),
@@ -790,8 +790,8 @@ def download_all_pics(wallhaven_url):
     _files_count = 0
     pics = []
     for page_num in range(1, int(Args.MAX_PAGE) + 1):
-        wallhaven_url = wallhaven_url + str(page_num)
-        pending_pic_list = get_pending_pic_url(wallhaven_url)
+        current_url = f"{wallhaven_url}{page_num}"
+        pending_pic_list = get_pending_pic_url(current_url)
         num = 0
         purity = {"sfw": 0, "sketchy": 0, "nsfw": 0}
         for target_pic in pending_pic_list:
