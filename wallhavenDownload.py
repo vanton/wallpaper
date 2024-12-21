@@ -5,7 +5,7 @@ Version: 0.12.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Saturday, 2024-12-21 20:44:17
+Last Modified: Saturday, 2024-12-21 21:11:27
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -627,35 +627,21 @@ async def download_async(
     Raises:
         ValueError: If no images to download or invalid destination directory.
     """
-    if len(pics) == 0:
+    if not pics:
         raise ValueError("No images to download")
-    if not Path(dest_dir).exists():
-        raise ValueError("Invalid destination directory")
     dest_path = Path(dest_dir)
+    if not dest_path.exists():
+        raise ValueError("Invalid destination directory")
+
     downloading_path = Path(downloading_dir)
     semaphore = asyncio.Semaphore(max_concurrent)
     # Pre-process all tasks
     download_tasks = [
         DownloadTask(
-            task_id=progress.add_task(
-                description="",
-                filename=pic.path.split("/")[-1],
-                colors="".join(f"[{color}]██" for color in pic.colors),
-                purity=(
-                    f"[red]{pic.purity}"
-                    if pic.purity.lower() == "nsfw"
-                    else (
-                        f"[green]{pic.purity}"
-                        if pic.purity.lower() == "sfw"
-                        else f"[yellow]{pic.purity}"
-                    )
-                ),
-                start=False,
-                visible=False,
-            ),
+            task_id=_create_progress_task(pic),
             url=pic.path,
-            path=dest_path / pic.path.split("/")[-1],
-            downloading=downloading_path / pic.path.split("/")[-1],
+            path=dest_path / Path(pic.path).name,
+            downloading=downloading_path / Path(pic.path).name,
         )
         for pic in pics
     ]
@@ -676,22 +662,53 @@ async def download_async(
             *(bounded_download(task) for task in download_tasks),
             return_exceptions=True,
         )
-        # Handle exceptions
-        for pic, result in zip(pics, results):
-            if isinstance(result, Exception):
-                log.error(f"Failed to download {pic}: {result}")
+        # Process results
+        _handle_download_results(pics, results)
+
+
+def _create_progress_task(pic: TargetPic) -> TaskID:
+    """Create a progress task for a single download"""
+    return progress.add_task(
+        description="",
+        filename=Path(pic.path).name,
+        colors="".join(f"[{color}]██" for color in pic.colors),
+        purity=_get_purity_format(pic.purity),
+        start=False,
+        visible=False,
+    )
+
+
+def _get_purity_format(purity: str) -> str:
+    """Format purity string with appropriate color"""
+    purity = purity.lower()
+    if purity == "nsfw":
+        return f"[red]{purity}"
+    elif purity == "sfw":
+        return f"[green]{purity}"
+    return f"[yellow]{purity}"
+
+
+def _handle_download_results(pics: list[TargetPic], results: list) -> None:
+    """Process download results and log errors"""
+    for pic, result in zip(pics, results):
+        if isinstance(result, Exception):
+            log.error(f"Failed to download {pic.id}: {result}")
 
 
 def download(pics: list[TargetPic], dest_dir=Args.SAVE_PATH):
-    """Entry point for downloads - runs async code in event loop"""
+    """Entry point for downloads with improved error handling"""
     try:
         asyncio.run(download_async(pics, dest_dir))
     except KeyboardInterrupt:
         log.info("Download interrupted by user")
         done_event.set()
     except Exception as e:
-        log.error(f"Download failed: {e}")
+        log.error(f"Download failed: {str(e)}")
         done_event.set()
+    finally:
+        # Ensure cleanup happens
+        if not done_event.is_set():
+            done_event.set()
 
 
 def download_one_pic(target_pic: TargetPic) -> None | TargetPic:
