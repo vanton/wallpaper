@@ -5,7 +5,7 @@ Version: 0.12.8
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Saturday, 2024-12-21 21:46:17
+Last Modified: Saturday, 2024-12-21 22:43:14
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import shutil
 import signal
 from collections import deque
@@ -347,11 +348,12 @@ def calculate_dir_size(path: str | Path) -> int:
         return 0
 
     try:
-        return sum(
-            f.stat().st_size
-            for f in path.iterdir()
-            if f.is_file() and not f.name.startswith(".")
-        )
+        with os.scandir(path) as it:
+            return sum(
+                entry.stat().st_size
+                for entry in it
+                if entry.is_file() and not entry.name.startswith(".")
+            )
     except Exception as e:
         log.error(f"Error calculating directory size for {path}: {e}")
         return 0
@@ -461,7 +463,7 @@ def clean_directory(
     files_info.sort(key=lambda x: x[1])
 
     # Calculate files to remove
-    files_to_remove = files_info[:-(max_files):] if len(files_info) > max_files else []
+    files_to_remove = files_info[:-max_files] if len(files_info) > max_files else []
 
     # Remove files
     removed_count = 0
@@ -675,6 +677,7 @@ def _create_progress_task(pic: TargetPic) -> TaskID:
         purity=_get_purity_format(pic.purity),
         start=False,
         visible=False,
+        total=None,
     )
 
 
