@@ -5,7 +5,7 @@ Version: 0.12.7
 File Created: Friday, 2021-11-05 23:10:20
 Author: vanton
 -----
-Last Modified: Wednesday, 2024-12-18 19:01:44
+Last Modified: Saturday, 2024-12-21 20:44:17
 Modified By: vanton
 -----
 Copyright  2021-2024
@@ -30,9 +30,6 @@ from threading import Event
 import aiofiles
 import aiohttp
 import requests
-
-from configs import DEBUG, APIKey, Args, max_files
-from rich import filesize
 from rich.console import Group
 from rich.live import Live
 from rich.logging import RichHandler
@@ -50,6 +47,9 @@ from rich.progress import (
 )
 from rich.style import Style
 from rich.table import Column
+
+from configs import DEBUG, APIKey, Args, max_files
+from rich import filesize
 
 #!##############################################################################
 
@@ -720,13 +720,17 @@ def handle_server_response(response_bytes) -> dict | None:
     Returns:
         Returns the parsed JSON object if decoding and parsing are successful, otherwise None is returned.
     """
+    if not response_bytes:
+        return None
     try:
-        response_str = response_bytes.decode("utf-8")
-        response_dict = json.loads(response_str)
-        return response_dict
-    except json.JSONDecodeError as e:
+        return json.loads(response_bytes.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
         log.critical(f"Result conversion error: {e}")
         return None
+
+
+# Create a session object at module level
+session = requests.Session()
 
 
 def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
@@ -738,28 +742,29 @@ def get_pending_pic_url(wallhaven_url: str) -> list[TargetPic]:
         list: List of dictionaries containing image metadata (ID, resolution, URL, and file type).
     """
     # response_res = requests.get(wallhaven_url, proxies=proxies).content
-    response_res = requests.get(url=wallhaven_url).content
+    # Use session instead of requests directly
+    with session.get(url=wallhaven_url, stream=True) as response:
+        response_res = response.content
     response_res_dict = handle_server_response(response_bytes=response_res)
-    if response_res_dict is None:
-        log.critical("Failed to get image list")
-        raise Exception("Failed to get image list")
+    err_msg = "Failed to get image list"
+    if response_res_dict is None or "data" not in response_res_dict:
+        log.critical(err_msg)
+        raise Exception(err_msg)
     data = response_res_dict.get("data")
     if data is None:
-        log.critical("Failed to get image list")
-        raise Exception("Failed to get image list")
-    target_pics_list: list[TargetPic] = []
-    for pic in data:
-        target_pics_list.append(
-            TargetPic(
-                id=pic.get("id"),
-                file_size=pic.get("file_size"),
-                path=pic.get("path"),
-                resolution=pic.get("resolution"),
-                purity=pic.get("purity"),
-                colors=pic.get("colors"),
-            )
+        log.critical(err_msg)
+        raise Exception(err_msg)
+    return [
+        TargetPic(
+            id=pic.get("id"),
+            file_size=pic.get("file_size"),
+            path=pic.get("path"),
+            resolution=pic.get("resolution"),
+            purity=pic.get("purity"),
+            colors=pic.get("colors"),
         )
-    return target_pics_list
+        for pic in data
+    ]
 
 
 def download_all_pics(wallhaven_url):

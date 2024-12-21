@@ -2,8 +2,9 @@
 .venv
 __pycache__
 async_progress.py
-log/*.*
-Pic/*.*
+log/**
+Pic/**
+downloading/**
 rich/**
 stackoverflow/**
 tmp/**
